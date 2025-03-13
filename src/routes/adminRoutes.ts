@@ -1,30 +1,32 @@
-// import express from "express";
-// import { AdminAuthController } from "../controllers/admin/authController";
-// import { MentorApprovalController } from "../controllers/admin/mentorApprovalController";
-// import { authenticateToken } from "../middleware/auth";
+import express, { Router } from "express";
+import { AdminAuthController } from "../controllers/admin/authController";
+import { authenticateToken } from "../middleware/auth";
 
-// const router = express.Router();
+const router = Router();
 
-// // Public admin route (login only)
-// router.post("/login", AdminAuthController.login as express.RequestHandler);
+router.post(
+  "/setup",
+  AdminAuthController.setupDefaultAdmin as express.RequestHandler
+);
 
-// // Protected admin routes
-// router.post(
-//   "/promote-to-admin",
-//   authenticateToken as express.RequestHandler,
-//   AdminAuthController.promoteToAdmin as express.RequestHandler
-// );
+router.post("/login", AdminAuthController.login as express.RequestHandler);
 
-// router.get(
-//   "/mentors/unapproved",
-//   authenticateToken as express.RequestHandler,
-//   MentorApprovalController.getUnapprovedMentors as express.RequestHandler
-// );
+router.get(
+  "/mentors/unapproved",
+  authenticateToken as express.RequestHandler,
+  AdminAuthController.getUnapprovedMentors as express.RequestHandler
+);
 
-// router.post(
-//   "/mentors/approve",
-//   authenticateToken as express.RequestHandler,
-//   MentorApprovalController.updateMentorApproval as express.RequestHandler
-// );
+router.post(
+  "/mentor/approve",
+  authenticateToken as express.RequestHandler,
+  AdminAuthController.approveMentor as express.RequestHandler
+);
 
-// export default router;
+router.post(
+  "/promote-to-admin",
+  authenticateToken as express.RequestHandler,
+  AdminAuthController.promoteToAdmin as express.RequestHandler
+);
+
+export default router;

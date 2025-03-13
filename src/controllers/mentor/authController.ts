@@ -10,7 +10,6 @@ import fs from "fs";
 import fsPromises from "fs/promises";
 import { CookieOptions } from "express";
 
-// User type definition
 interface User {
   user_id: string;
   name: string;
@@ -21,17 +20,16 @@ interface User {
   gender: "Male" | "Female";
 }
 
-// Mentor-specific type definition
 interface Mentor {
-  mentor_id: string; // Added mentor_id
+  mentor_id: string;
   user_id: string;
   bio: string;
   social_link: string | null;
-  image_url: string | null; // String for file path
+  image_url: string | null;
+  organization: string | null; // Added organization field
   is_approved: boolean;
 }
 
-// Extend Request type to include user from JWT
 interface AuthenticatedRequest extends Request {
   user?: { user_id: string; user_type: string; email?: string };
 }
@@ -54,7 +52,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+  limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const filetypes = /jpeg|jpg|png/;
     const extname = filetypes.test(
@@ -98,11 +96,19 @@ export class MentorAuthController {
       }
 
       try {
-        const { name, email, username, password, gender, bio, social_link } =
-          req.body;
+        const {
+          name,
+          email,
+          username,
+          password,
+          gender,
+          bio,
+          social_link,
+          organization,
+        } = req.body;
         const imageUrl = req.file ? `/uploads/${req.file.filename}` : null;
         const user_id = uuidv4();
-        const mentor_id = uuidv4(); // Generate mentor_id
+        const mentor_id = uuidv4();
         const hashedPassword = await bcrypt.hash(password, 10);
 
         const CREATE_USER = `
@@ -110,8 +116,8 @@ export class MentorAuthController {
           VALUES (?, ?, ?, ?, ?, ?, ?)
         `;
         const CREATE_MENTOR = `
-          INSERT INTO Mentors (mentor_id, user_id, bio, social_link, image_url, is_approved)
-          VALUES (?, ?, ?, ?, ?, ?)
+          INSERT INTO Mentors (mentor_id, user_id, bio, social_link, image_url, organization, is_approved)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
         `;
 
         if (!name || !email || !username || !password || !gender || !bio) {
@@ -146,6 +152,7 @@ export class MentorAuthController {
           bio,
           social_link,
           imageUrl,
+          organization, // Added organization to insert
           false,
         ]);
 
@@ -157,11 +164,10 @@ export class MentorAuthController {
           { expiresIn: JWT_EXPIRES_IN }
         );
 
-        // Add this section to set the httpOnly cookie
         const cookieOptions: CookieOptions = {
           httpOnly: true,
-          secure: process.env.NODE_ENV === "production", // Use secure cookies in production
-          sameSite: "strict", // Helps prevent CSRF attacks
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "strict",
           path: "/",
         };
         res.cookie("jwtToken", token, cookieOptions);
@@ -193,6 +199,7 @@ export class MentorAuthController {
     try {
       const { email, password } = req.body;
 
+      // Validate input without logging sensitive data
       if (!email || !password) {
         return res.status(400).json({ message: "Missing email or password" });
       }
@@ -215,58 +222,56 @@ export class MentorAuthController {
         { expiresIn: JWT_EXPIRES_IN }
       );
 
-      // Add this section to set the httpOnly cookie
       const cookieOptions: CookieOptions = {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production", // Use secure cookies in production
-        sameSite: "strict", // Helps prevent CSRF attacks
+        secure: process.env.NODE_ENV === "production", // Ensures cookie is only sent over HTTPS
+        sameSite: "strict",
         path: "/",
       };
       res.cookie("jwtToken", token, cookieOptions);
 
+      // Response does not include sensitive data
       res.json({
         message: "Mentor login successful",
         user: { user_id: user.user_id, email: user.email },
       });
     } catch (error) {
-      console.error("Mentor login error:", error);
-      res
-        .status(500)
-        .json({ message: "Server error", error: (error as any).message });
+      // Log only a generic message to avoid exposing sensitive data
+      console.error("Mentor login error: An error occurred during login");
+      res.status(500).json({ message: "Server error" });
     }
   }
 
-  static async getProfile(req: AuthenticatedRequest, res: Response) {
+  static async getProfile(req: Request, res: Response) {
     try {
-      const user = req.user;
-      if (!user) {
-        return res.status(401).json({ message: "Unauthorized: No user data" });
+      const { mentor_id } = req.params;
+
+      if (!mentor_id) {
+        return res.status(400).json({ message: "Mentor ID is required" });
       }
 
-      const user_id = user.user_id;
+      const FIND_MENTOR = `
+        SELECT mentor_id, user_id, bio, social_link, image_url, organization, is_approved
+        FROM Mentors
+        WHERE mentor_id = ?
+      `;
+      const [mentorRows] = await pool.execute(FIND_MENTOR, [mentor_id]);
+      const mentorData = (mentorRows as Mentor[])[0];
+
+      if (!mentorData) {
+        return res.status(404).json({ message: "Mentor not found" });
+      }
 
       const FIND_USER = `
         SELECT user_id, name, email, username, gender
         FROM Users
         WHERE user_id = ?
       `;
-      const [userRows] = await pool.execute(FIND_USER, [user_id]);
+      const [userRows] = await pool.execute(FIND_USER, [mentorData.user_id]);
       const userData = (userRows as User[])[0];
 
       if (!userData) {
-        return res.status(404).json({ message: "User not found" });
-      }
-
-      const FIND_MENTOR = `
-        SELECT mentor_id, user_id, bio, social_link, image_url, is_approved
-        FROM Mentors
-        WHERE user_id = ?
-      `;
-      const [mentorRows] = await pool.execute(FIND_MENTOR, [user_id]);
-      const mentorData = (mentorRows as Mentor[])[0];
-
-      if (!mentorData) {
-        return res.status(404).json({ message: "Mentor profile not found" });
+        return res.status(404).json({ message: "Associated user not found" });
       }
 
       const profile = {
@@ -275,6 +280,7 @@ export class MentorAuthController {
         bio: mentorData.bio,
         social_link: mentorData.social_link,
         image_url: mentorData.image_url,
+        organization: mentorData.organization, // Added organization to profile
         is_approved: mentorData.is_approved,
       };
 
@@ -296,7 +302,8 @@ export class MentorAuthController {
       }
 
       try {
-        const { name, email, gender, bio, social_link } = req.body;
+        const { name, email, gender, bio, social_link, organization } =
+          req.body; // Added organization
         const user = req.user;
         if (!user) {
           if (req.file) await fsPromises.unlink(req.file.path);
@@ -308,12 +315,11 @@ export class MentorAuthController {
         const user_id = user.user_id;
         const imageUrl = req.file ? `/uploads/${req.file.filename}` : null;
 
-        // Fetch existing user data
         const FIND_USER = `
-        SELECT name, email, gender
-        FROM Users
-        WHERE user_id = ?
-      `;
+          SELECT name, email, gender
+          FROM Users
+          WHERE user_id = ?
+        `;
         const [userRows] = await pool.execute(FIND_USER, [user_id]);
         const existingUser = (userRows as User[])[0];
 
@@ -322,12 +328,11 @@ export class MentorAuthController {
           return res.status(404).json({ message: "User not found" });
         }
 
-        // Fetch existing mentor data
         const FIND_MENTOR = `
-        SELECT mentor_id, bio, social_link, image_url
-        FROM Mentors
-        WHERE user_id = ?
-      `;
+          SELECT mentor_id, bio, social_link, image_url, organization
+          FROM Mentors
+          WHERE user_id = ?
+        `;
         const [mentorRows] = await pool.execute(FIND_MENTOR, [user_id]);
         const existingMentor = (mentorRows as Mentor[])[0];
 
@@ -336,21 +341,29 @@ export class MentorAuthController {
           return res.status(404).json({ message: "Mentor profile not found" });
         }
 
-        // Determine updated values
-        const updatedName = name !== undefined ? name : existingUser.name;
-        const updatedEmail = email !== undefined ? email : existingUser.email;
+        const updatedName =
+          name !== undefined && name !== "" ? name : existingUser.name;
+        const updatedEmail =
+          email !== undefined && email !== "" ? email : existingUser.email;
         const updatedGender =
-          gender !== undefined ? gender : existingUser.gender;
-        const updatedBio = bio !== undefined ? bio : existingMentor.bio;
+          gender !== undefined && gender !== "" ? gender : existingUser.gender;
+        const updatedBio =
+          bio !== undefined && bio !== "" ? bio : existingMentor.bio;
         const updatedSocialLink =
-          social_link !== undefined ? social_link : existingMentor.social_link;
+          social_link !== undefined && social_link !== ""
+            ? social_link
+            : existingMentor.social_link;
         const updatedImageUrl =
           imageUrl !== null ? imageUrl : existingMentor.image_url;
+        const updatedOrganization = // Added organization update logic
+          organization !== undefined && organization !== ""
+            ? organization
+            : existingMentor.organization;
 
         if (
+          updatedEmail !== existingUser.email &&
           email !== undefined &&
-          email !== "" &&
-          email !== existingUser.email
+          email !== ""
         ) {
           const CHECK_EMAIL = `
             SELECT 1 FROM Users WHERE email = ? AND user_id != ?
@@ -366,15 +379,15 @@ export class MentorAuthController {
         }
 
         const UPDATE_USER = `
-        UPDATE Users
-        SET name = ?, email = ?, gender = ?
-        WHERE user_id = ?
-      `;
+          UPDATE Users
+          SET name = ?, email = ?, gender = ?
+          WHERE user_id = ?
+        `;
         const UPDATE_MENTOR = `
-        UPDATE Mentors
-        SET bio = ?, social_link = ?, image_url = ?
-        WHERE user_id = ?
-      `;
+          UPDATE Mentors
+          SET bio = ?, social_link = ?, image_url = ?, organization = ?
+          WHERE user_id = ?
+        `;
 
         try {
           await connection.beginTransaction();
@@ -393,6 +406,7 @@ export class MentorAuthController {
             updatedBio,
             updatedSocialLink,
             updatedImageUrl,
+            updatedOrganization, // Added organization to update
             user_id,
           ]);
           if ((mentorResult as any).affectedRows === 0) {
@@ -407,11 +421,10 @@ export class MentorAuthController {
             { expiresIn: JWT_EXPIRES_IN }
           );
 
-          // Add this section to set the httpOnly cookie
           const cookieOptions: CookieOptions = {
             httpOnly: true,
-            secure: process.env.NODE_ENV === "production", // Use secure cookies in production
-            sameSite: "strict", // Helps prevent CSRF attacks
+            secure: process.env.NODE_ENV === "production",
+            sameSite: "strict",
             path: "/",
           };
           res.cookie("jwtToken", newToken, cookieOptions);
@@ -438,5 +451,48 @@ export class MentorAuthController {
           .json({ message: "Server error", error: (error as any).message });
       }
     });
+  }
+
+  static async getAllMentors(req: Request, res: Response) {
+    try {
+      const GET_ALL_MENTORS = `
+        SELECT 
+          u.user_id, 
+          u.name, 
+          u.email, 
+          u.username, 
+          u.user_type, 
+          u.gender, 
+          u.created_at AS user_created_at,
+          m.mentor_id, 
+          m.bio, 
+          m.social_link, 
+          m.image_url, 
+          m.organization, 
+          m.is_approved, 
+          m.created_at AS mentor_created_at
+        FROM Users u
+        INNER JOIN Mentors m ON u.user_id = m.user_id
+        WHERE u.user_type = 'Mentor';
+      `;
+
+      const [rows] = await pool.execute(GET_ALL_MENTORS);
+      const mentors = rows as (User &
+        Mentor & { user_created_at: string; mentor_created_at: string })[];
+
+      if (!mentors.length) {
+        return res.status(404).json({ message: "No registered mentors found" });
+      }
+
+      res.status(200).json({
+        message: "Registered mentors retrieved successfully",
+        data: mentors,
+      });
+    } catch (error) {
+      console.error("Get all mentors error:", error);
+      res
+        .status(500)
+        .json({ message: "Server error", error: (error as any).message });
+    }
   }
 }

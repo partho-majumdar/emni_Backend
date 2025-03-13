@@ -6,8 +6,20 @@ import {
   addStudentInterests,
   updateStudentInterests,
 } from "../controllers/student/interestController";
+import { getSuggestedMentors } from "../controllers/student/mentorSuggestionController";
 
 const router = Router();
+
+router.get(
+  "/suggested-mentors",
+  authenticateToken as express.RequestHandler,
+  getSuggestedMentors as express.RequestHandler
+);
+
+router.get(
+  "/all",
+  StudentAuthController.getAllStudents as express.RequestHandler
+);
 
 router.post(
   "/register",
@@ -17,8 +29,7 @@ router.post(
 router.post("/login", StudentAuthController.login as express.RequestHandler);
 
 router.get(
-  "/profile",
-  authenticateToken as express.RequestHandler,
+  "/:student_id",
   StudentAuthController.getProfile as express.RequestHandler
 );
 
@@ -32,8 +43,8 @@ router.put(
 
 router.get(
   "/interests/list",
-  authenticateToken as express.RequestHandler, // Now requires authentication
-  getStudentInterests as express.RequestHandler // Changed to fetch student's interests
+  authenticateToken as express.RequestHandler,
+  getStudentInterests as express.RequestHandler
 );
 
 router.post(

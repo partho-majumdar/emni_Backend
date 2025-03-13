@@ -9,7 +9,11 @@ import {
 
 const router = Router();
 
-// this is for login and register
+router.get(
+  "/all",
+  MentorAuthController.getAllMentors as express.RequestHandler
+);
+
 router.post(
   "/register",
   MentorAuthController.register as express.RequestHandler
@@ -18,8 +22,7 @@ router.post(
 router.post("/login", MentorAuthController.login as express.RequestHandler);
 
 router.get(
-  "/profile",
-  authenticateToken as express.RequestHandler,
+  "/:mentor_id",
   MentorAuthController.getProfile as express.RequestHandler
 );
 

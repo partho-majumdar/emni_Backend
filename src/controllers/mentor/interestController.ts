@@ -114,25 +114,24 @@ export const updateMentorInterests = async (
   req: AuthenticatedRequest,
   res: Response
 ) => {
-  console.log("req.user:", req.user);
   const userId = req.user?.user_id;
-  console.log("userId:", userId);
   const { interestIds } = req.body;
 
   if (!userId) {
     return res.status(401).json({ success: false, message: "Unauthorized" });
   }
 
-  // If interestIds is not provided or not an array, return an error
   if (!interestIds || !Array.isArray(interestIds)) {
-    return res
-      .status(400)
-      .json({ success: false, message: "Invalid interest IDs" });
+    return res.status(400).json({
+      success: false,
+      message: "Invalid interest IDs format",
+    });
   }
 
   try {
     await db.query("START TRANSACTION");
 
+    // Verify mentor status
     const [mentor] = await db.query<RowDataPacket[]>(
       "SELECT user_id FROM Mentors WHERE user_id = ?",
       [userId]
@@ -141,20 +140,31 @@ export const updateMentorInterests = async (
       throw new Error("User is not a mentor");
     }
 
-    // If interestIds is empty, keep existing interests (no changes)
-    if (interestIds.length === 0) {
+    // Get existing mentor interests
+    const [existingInterests] = await db.query<RowDataPacket[]>(
+      "SELECT interest_id FROM User_Interests WHERE user_id = ?",
+      [userId]
+    );
+    const existingIds = existingInterests.map(
+      (interest) => interest.interest_id
+    );
+
+    // Process new interests
+    const uniqueNewIds = [...new Set(interestIds)]; // Remove request duplicates
+    const newInterestIds = uniqueNewIds.filter(
+      (id) => !existingIds.includes(id)
+    );
+
+    if (newInterestIds.length === 0) {
       await db.query("COMMIT");
       return res.status(200).json({
         success: true,
-        message: "No changes made to mentor interests",
+        message: "No new interests to add",
       });
     }
 
-    // Delete existing interests
-    await db.query("DELETE FROM User_Interests WHERE user_id = ?", [userId]);
-
-    // Insert ALL new interests from the request
-    const values = interestIds.map((interestId) => [userId, interestId]);
+    // Insert only novel interests
+    const values = newInterestIds.map((id) => [userId, id]);
     await db.query(
       "INSERT INTO User_Interests (user_id, interest_id) VALUES ?",
       [values]
@@ -164,13 +174,14 @@ export const updateMentorInterests = async (
     res.status(200).json({
       success: true,
       message: "Mentor interests updated successfully",
+      newInterestsAdded: newInterestIds.length,
     });
   } catch (error: any) {
     await db.query("ROLLBACK");
-    console.error("Error updating mentor interests:", error);
+    console.error("Mentor interest update error:", error);
     res.status(500).json({
       success: false,
-      message: error.message || "Server error",
+      message: error.message || "Internal server error",
     });
   }
 };

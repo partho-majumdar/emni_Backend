@@ -6,7 +6,6 @@ import bcrypt from "bcryptjs";
 import { v4 as uuidv4 } from "uuid";
 import { CookieOptions } from "express";
 
-// User type definition
 interface User {
   user_id: string;
   name: string;
@@ -17,7 +16,6 @@ interface User {
   gender: "Male" | "Female";
 }
 
-// Student type definition (with student_id)
 interface Student {
   student_id: string;
   user_id: string;
@@ -25,7 +23,6 @@ interface Student {
   graduation_year: string;
 }
 
-// Extend Request type to include user from JWT
 interface AuthenticatedRequest extends Request {
   user?: { user_id: string; user_type: string; email?: string };
 }
@@ -90,7 +87,7 @@ export class StudentAuthController {
     try {
       const { name, email, username, password, gender, dob, graduation_year } =
         req.body;
-      const student_id = uuidv4(); // Generate student_id
+      const student_id = uuidv4();
 
       const CREATE_STUDENT = `
         INSERT INTO Students (student_id, user_id, dob, graduation_year)
@@ -129,11 +126,13 @@ export class StudentAuthController {
         gender,
       });
 
+      const formattedDob = new Date(dob).toISOString().split("T")[0];
+
       console.log("Inserting into Students...");
       await connection.execute(CREATE_STUDENT, [
         student_id,
         user_id,
-        dob,
+        formattedDob,
         graduation_year,
       ]);
       await connection.commit();
@@ -147,7 +146,6 @@ export class StudentAuthController {
         { expiresIn: JWT_EXPIRES_IN }
       );
 
-      // ADD THIS SECTION:
       const cookieOptions: CookieOptions = {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
@@ -159,7 +157,7 @@ export class StudentAuthController {
       res.status(201).json({
         message: "Registration successful",
         user: { user_id: user.user_id, email: user.email },
-      }); // Do NOT send the token in the JSON body
+      });
     } catch (error) {
       console.error("Student register error:", error);
       try {
@@ -181,6 +179,7 @@ export class StudentAuthController {
     try {
       const { email, password } = req.body;
 
+      // Validate input without logging sensitive data
       if (!email || !password) {
         return res.status(400).json({ message: "Missing email or password" });
       }
@@ -203,64 +202,64 @@ export class StudentAuthController {
         { expiresIn: JWT_EXPIRES_IN }
       );
 
-      // ADD THIS SECTION:
       const cookieOptions: CookieOptions = {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
+        secure: process.env.NODE_ENV === "production", // Ensures cookie is only sent over HTTPS
         sameSite: "strict",
         path: "/",
       };
       res.cookie("jwtToken", token, cookieOptions);
 
+      // Response does not include sensitive data
       res.json({
         message: "Login successful",
         user: { user_id: user.user_id, email: user.email },
-      }); // Do NOT send the token in the JSON body
+      });
     } catch (error) {
-      console.error("Student login error:", error);
-      res
-        .status(500)
-        .json({ message: "Server error", error: (error as any).message });
+      // Log only a generic message to avoid exposing sensitive data
+      console.error("Student login error: An error occurred during login");
+      res.status(500).json({ message: "Server error" });
     }
   }
 
-  static async getProfile(req: AuthenticatedRequest, res: Response) {
+  static async getProfile(req: Request, res: Response) {
     try {
-      const user = req.user;
-      if (!user) {
-        return res.status(401).json({ message: "Unauthorized: No user data" });
+      const { student_id } = req.params;
+
+      if (!student_id) {
+        return res.status(400).json({ message: "Student ID is required" });
       }
 
-      const user_id = user.user_id;
+      const FIND_STUDENT = `
+        SELECT student_id, user_id, dob, graduation_year
+        FROM Students
+        WHERE student_id = ?
+      `;
+      const [studentRows] = await pool.execute(FIND_STUDENT, [student_id]);
+      const student = (studentRows as Student[])[0];
+
+      if (!student) {
+        return res.status(404).json({ message: "Student not found" });
+      }
 
       const FIND_USER = `
         SELECT user_id, name, email, username, gender
         FROM Users
         WHERE user_id = ?
       `;
-      const [userRows] = await pool.execute(FIND_USER, [user_id]);
+      const [userRows] = await pool.execute(FIND_USER, [student.user_id]);
       const userData = (userRows as User[])[0];
 
       if (!userData) {
-        return res.status(404).json({ message: "User not found" });
+        return res.status(404).json({ message: "Associated user not found" });
       }
 
-      const FIND_STUDENT = `
-        SELECT student_id, user_id, dob, graduation_year
-        FROM Students
-        WHERE user_id = ?
-      `;
-      const [studentRows] = await pool.execute(FIND_STUDENT, [user_id]);
-      const student = (studentRows as Student[])[0];
-
-      if (!student) {
-        return res.status(404).json({ message: "Student profile not found" });
-      }
+      const formattedDob = new Date(student.dob).toISOString().split("T")[0];
 
       const profile = {
         ...userData,
         student_id: student.student_id,
-        dob: student.dob,
+        dob: formattedDob,
         graduation_year: student.graduation_year,
       };
 
@@ -294,7 +293,6 @@ export class StudentAuthController {
       if (!existingUser) {
         return res.status(404).json({ message: "User not found" });
       }
-
       const FIND_STUDENT = `
         SELECT student_id, dob, graduation_year
         FROM Students
@@ -312,8 +310,12 @@ export class StudentAuthController {
         email !== undefined && email !== "" ? email : existingUser.email;
       const updatedGender =
         gender !== undefined && gender !== "" ? gender : existingUser.gender;
-      const updatedDob =
-        dob !== undefined && dob !== "" ? dob : existingStudent.dob;
+
+      let updatedDob = existingStudent.dob;
+      if (dob !== undefined && dob !== "") {
+        updatedDob = new Date(dob).toISOString().split("T")[0];
+      }
+
       const updatedGraduationYear =
         graduation_year !== undefined && graduation_year !== ""
           ? graduation_year
@@ -379,10 +381,10 @@ export class StudentAuthController {
         JWT_SECRET,
         { expiresIn: JWT_EXPIRES_IN }
       );
-      // ADD THIS SECTION:
+
       const cookieOptions: CookieOptions = {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production", 
+        secure: process.env.NODE_ENV === "production",
         sameSite: "strict",
         path: "/",
       };
@@ -406,6 +408,52 @@ export class StudentAuthController {
     } finally {
       connection.release();
       console.log("Connection released");
+    }
+  }
+
+  static async getAllStudents(req: Request, res: Response) {
+    try {
+      const GET_ALL_STUDENTS = `
+        SELECT 
+          u.user_id, 
+          u.name, 
+          u.email, 
+          u.username, 
+          u.user_type, 
+          u.gender, 
+          u.created_at AS user_created_at,
+          s.student_id, 
+          s.dob, 
+          s.graduation_year, 
+          s.created_at AS student_created_at
+        FROM Users u
+        INNER JOIN Students s ON u.user_id = s.user_id
+        WHERE u.user_type = 'Student';
+      `;
+
+      const [rows] = await pool.execute(GET_ALL_STUDENTS);
+      const students = rows as (User & Student)[];
+
+      if (!students.length) {
+        return res
+          .status(404)
+          .json({ message: "No registered students found" });
+      }
+
+      const formattedStudents = students.map((student) => ({
+        ...student,
+        dob: new Date(student.dob).toISOString().split("T")[0],
+      }));
+
+      res.status(200).json({
+        message: "Registered students retrieved successfully",
+        data: formattedStudents,
+      });
+    } catch (error) {
+      console.error("Get all students error:", error);
+      res
+        .status(500)
+        .json({ message: "Server error", error: (error as any).message });
     }
   }
 }
