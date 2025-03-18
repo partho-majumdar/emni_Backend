@@ -140,41 +140,43 @@ export const updateStudentInterests = async (
       throw new Error("User is not a student");
     }
 
-    // Get existing interests
-    const [existingInterests] = await db.query<RowDataPacket[]>(
-      "SELECT interest_id FROM User_Interests WHERE user_id = ?",
-      [userId]
-    );
-    const existingIds = existingInterests.map(
-      (interest) => interest.interest_id
-    );
+    // Delete all existing interests
+    await db.query("DELETE FROM User_Interests WHERE user_id = ?", [userId]);
 
-    // Filter new unique interests
-    const uniqueNewIds = [...new Set(interestIds)];
-    const newInterestIds = uniqueNewIds.filter(
-      (id) => !existingIds.includes(id)
-    );
-
-    if (newInterestIds.length === 0) {
+    // If no interests provided, just return after deletion
+    if (interestIds.length === 0) {
       await db.query("COMMIT");
       return res.status(200).json({
         success: true,
-        message: "No new interests to add",
+        message: "All interests removed successfully",
       });
     }
 
-    // Insert only new interests
-    const values = newInterestIds.map((interestId) => [userId, interestId]);
+    // Filter unique interest IDs
+    const uniqueInterestIds = [...new Set(interestIds)];
+
+    // Insert new interests
+    const values = uniqueInterestIds.map((interestId) => [userId, interestId]);
     await db.query(
       "INSERT INTO User_Interests (user_id, interest_id) VALUES ?",
       [values]
+    );
+
+    // Fetch the newly added interests with their names
+    const [updatedInterests] = await db.query<RowDataPacket[]>(
+      `SELECT i.interest_id, i.interest_name 
+       FROM User_Interests ui
+       JOIN Interests i ON ui.interest_id = i.interest_id
+       WHERE ui.user_id = ?`,
+      [userId]
     );
 
     await db.query("COMMIT");
     res.status(200).json({
       success: true,
       message: "Student interests updated successfully",
-      newInterestsAdded: newInterestIds.length,
+      interestsUpdated: uniqueInterestIds.length,
+      interests: updatedInterests,
     });
   } catch (error: any) {
     await db.query("ROLLBACK");

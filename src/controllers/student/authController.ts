@@ -156,7 +156,12 @@ export class StudentAuthController {
 
       res.status(201).json({
         message: "Registration successful",
-        user: { user_id: user.user_id, email: user.email },
+        user: {
+          user_id: user.user_id,
+          student_id: student_id,
+          email: user.email,
+          jwtToken: token,
+        },
       });
     } catch (error) {
       console.error("Student register error:", error);
@@ -179,13 +184,15 @@ export class StudentAuthController {
     try {
       const { email, password } = req.body;
 
-      // Validate input without logging sensitive data
+      // Validate input
       if (!email || !password) {
         return res.status(400).json({ message: "Missing email or password" });
       }
 
+      // Fetch user by email
       const user = await StudentAuthController.findByEmail(email);
 
+      // Validate credentials and user type
       if (
         !user ||
         !(await bcrypt.compare(password, user.password_hash)) ||
@@ -196,28 +203,44 @@ export class StudentAuthController {
           .json({ message: "Invalid credentials or not a student" });
       }
 
+      // Fetch student_id associated with the user_id
+      const FIND_STUDENT_ID = `
+        SELECT student_id FROM Students WHERE user_id = ?
+      `;
+      const [studentRows] = await pool.execute(FIND_STUDENT_ID, [user.user_id]);
+      const student = (studentRows as { student_id: string }[])[0];
+
+      if (!student) {
+        return res.status(404).json({ message: "Student profile not found" });
+      }
+
+      // Generate JWT token
       const token = jwt.sign(
         { user_id: user.user_id, user_type: user.user_type },
         JWT_SECRET,
         { expiresIn: JWT_EXPIRES_IN }
       );
 
+      // Set cookie options
       const cookieOptions: CookieOptions = {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production", // Ensures cookie is only sent over HTTPS
+        secure: process.env.NODE_ENV === "production",
         sameSite: "strict",
         path: "/",
       };
       res.cookie("jwtToken", token, cookieOptions);
 
-      // Response does not include sensitive data
       res.json({
         message: "Login successful",
-        user: { user_id: user.user_id, email: user.email },
+        user: {
+          user_id: user.user_id,
+          student_id: student.student_id,
+          email: user.email,
+          jwtToken: token,
+        },
       });
     } catch (error) {
-      // Log only a generic message to avoid exposing sensitive data
-      console.error("Student login error: An error occurred during login");
+      console.error("Student login error:", error);
       res.status(500).json({ message: "Server error" });
     }
   }
@@ -293,6 +316,7 @@ export class StudentAuthController {
       if (!existingUser) {
         return res.status(404).json({ message: "User not found" });
       }
+
       const FIND_STUDENT = `
         SELECT student_id, dob, graduation_year
         FROM Students
@@ -310,12 +334,10 @@ export class StudentAuthController {
         email !== undefined && email !== "" ? email : existingUser.email;
       const updatedGender =
         gender !== undefined && gender !== "" ? gender : existingUser.gender;
-
-      let updatedDob = existingStudent.dob;
-      if (dob !== undefined && dob !== "") {
-        updatedDob = new Date(dob).toISOString().split("T")[0];
-      }
-
+      const updatedDob =
+        dob !== undefined && dob !== ""
+          ? new Date(dob).toISOString().split("T")[0]
+          : existingStudent.dob;
       const updatedGraduationYear =
         graduation_year !== undefined && graduation_year !== ""
           ? graduation_year
@@ -338,10 +360,8 @@ export class StudentAuthController {
         }
       }
 
-      console.log("Starting transaction for updateProfile...");
       await connection.beginTransaction();
 
-      console.log("Updating Users...");
       const UPDATE_USER = `
         UPDATE Users
         SET name = ?, email = ?, gender = ?, password_hash = ?
@@ -358,7 +378,6 @@ export class StudentAuthController {
         throw new Error("Failed to update user data");
       }
 
-      console.log("Updating Students...");
       const UPDATE_STUDENT = `
         UPDATE Students
         SET dob = ?, graduation_year = ?
@@ -373,7 +392,6 @@ export class StudentAuthController {
         throw new Error("Failed to update student data");
       }
 
-      console.log("Committing transaction...");
       await connection.commit();
 
       const newToken = jwt.sign(
@@ -382,32 +400,17 @@ export class StudentAuthController {
         { expiresIn: JWT_EXPIRES_IN }
       );
 
-      const cookieOptions: CookieOptions = {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "strict",
-        path: "/",
-      };
-      res.cookie("jwtToken", newToken, cookieOptions);
-
       res.status(200).json({
         message: "Profile updated successfully",
-        user: { user_id, email: updatedEmail },
+        user: { user_id, email: updatedEmail, new_token: newToken },
       });
     } catch (error) {
-      console.error("Transaction error in updateProfile:", error);
-      try {
-        await connection.rollback();
-        console.log("Rollback successful");
-      } catch (rollbackError) {
-        console.error("Rollback failed:", rollbackError);
-      }
+      await connection.rollback();
       res
         .status(500)
         .json({ message: "Server error", error: (error as any).message });
     } finally {
       connection.release();
-      console.log("Connection released");
     }
   }
 
@@ -415,16 +418,16 @@ export class StudentAuthController {
     try {
       const GET_ALL_STUDENTS = `
         SELECT 
-          u.user_id, 
-          u.name, 
-          u.email, 
-          u.username, 
-          u.user_type, 
-          u.gender, 
+          u.user_id,
+          s.student_id,
+          u.name,
+          u.email,
+          u.username,
+          u.user_type,
+          u.gender,
           u.created_at AS user_created_at,
-          s.student_id, 
-          s.dob, 
-          s.graduation_year, 
+          s.dob,
+          s.graduation_year,
           s.created_at AS student_created_at
         FROM Users u
         INNER JOIN Students s ON u.user_id = s.user_id

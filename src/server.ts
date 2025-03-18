@@ -7,7 +7,7 @@ import { getAllInterests } from "./controllers/common/interestController";
 import { AdminAuthController } from "./controllers/admin/authController";
 
 // Load environment variables
-dotenv.config({ path: "../.env" }); // Adjust path since server.ts is in src/
+dotenv.config({ path: "../.env" });
 console.log(
   "JWT_SECRET loaded at startup:",
   process.env.JWT_SECRET || "default_secret"

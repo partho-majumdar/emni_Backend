@@ -83,7 +83,7 @@ export class AdminAuthController {
     const defaultAdmin = {
       email: "admin1@gmail.com",
       username: "admin1",
-      password_hash: "admin123", // Will be hashed by createUser
+      password_hash: "admin123",
       name: "Default Admin",
       user_type: "Admin" as const,
       gender: "Male" as const,
@@ -160,7 +160,7 @@ export class AdminAuthController {
 
       res.json({
         message: "Admin login successful",
-        user: { user_id: user.user_id, email: user.email },
+        user: { user_id: user.user_id, email: user.email, jwtToken: token },
       });
     } catch (error) {
       console.error("Admin login error:", error);

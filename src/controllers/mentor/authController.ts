@@ -1,14 +1,13 @@
-import { Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import pool from "../../config/database";
 import jwt from "jsonwebtoken";
 import { JWT_SECRET, JWT_EXPIRES_IN } from "../../config/jwt";
 import bcrypt from "bcryptjs";
 import { v4 as uuidv4 } from "uuid";
 import multer from "multer";
+import { CookieOptions } from "express";
 import path from "path";
 import fs from "fs";
-import fsPromises from "fs/promises";
-import { CookieOptions } from "express";
 
 interface User {
   user_id: string;
@@ -25,8 +24,8 @@ interface Mentor {
   user_id: string;
   bio: string;
   social_link: string | null;
-  image_url: string | null;
-  organization: string | null; // Added organization field
+  image_url: Buffer | null; // BLOB storage
+  organization: string | null;
   is_approved: boolean;
 }
 
@@ -34,24 +33,9 @@ interface AuthenticatedRequest extends Request {
   user?: { user_id: string; user_type: string; email?: string };
 }
 
-// Configure multer for file uploads
-const uploadDir = path.join(process.cwd(), "uploads");
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    cb(null, `${uniqueSuffix}${path.extname(file.originalname)}`);
-  },
-});
-
+// Configure multer for memory storage
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const filetypes = /jpeg|jpg|png/;
@@ -89,6 +73,22 @@ export class MentorAuthController {
 
   static async register(req: Request, res: Response) {
     const connection = await pool.getConnection();
+    const upload = multer({
+      storage: multer.memoryStorage(),
+      limits: { fileSize: 5 * 1024 * 1024 },
+      fileFilter: (req, file, cb) => {
+        const filetypes = /jpeg|jpg|png/;
+        const extname = filetypes.test(
+          path.extname(file.originalname).toLowerCase()
+        );
+        const mimetype = filetypes.test(file.mimetype);
+        if (extname && mimetype) {
+          return cb(null, true);
+        }
+        cb(new Error("Only JPEG/JPG/PNG images are allowed"));
+      },
+    });
+
     upload.single("image")(req, res, async (err) => {
       if (err) {
         console.error("Multer error:", err);
@@ -106,7 +106,7 @@ export class MentorAuthController {
           social_link,
           organization,
         } = req.body;
-        const imageUrl = req.file ? `/uploads/${req.file.filename}` : null;
+        const file = req.file;
         const user_id = uuidv4();
         const mentor_id = uuidv4();
         const hashedPassword = await bcrypt.hash(password, 10);
@@ -121,7 +121,6 @@ export class MentorAuthController {
         `;
 
         if (!name || !email || !username || !password || !gender || !bio) {
-          if (req.file) await fsPromises.unlink(req.file.path);
           return res.status(400).json({ message: "Missing required fields" });
         }
 
@@ -129,7 +128,6 @@ export class MentorAuthController {
           (await MentorAuthController.findByEmail(email)) ||
           (await MentorAuthController.findByUsername(username))
         ) {
-          if (req.file) await fsPromises.unlink(req.file.path);
           return res
             .status(400)
             .json({ message: "Username or email already exists" });
@@ -151,8 +149,8 @@ export class MentorAuthController {
           user_id,
           bio,
           social_link,
-          imageUrl,
-          organization, // Added organization to insert
+          file ? file.buffer : null,
+          organization,
           false,
         ]);
 
@@ -174,11 +172,15 @@ export class MentorAuthController {
 
         res.status(201).json({
           message: "Mentor registration successful",
-          user: { user_id: user_id, email: email },
+          user: {
+            user_id: user_id,
+            mentor_id: mentor_id,
+            email: email,
+            jwtToken: token,
+          },
         });
       } catch (error) {
         console.error("Mentor register error:", error);
-        if (req.file) await fsPromises.unlink(req.file.path);
         try {
           await connection.rollback();
           console.log("Rollback successful");
@@ -199,7 +201,6 @@ export class MentorAuthController {
     try {
       const { email, password } = req.body;
 
-      // Validate input without logging sensitive data
       if (!email || !password) {
         return res.status(400).json({ message: "Missing email or password" });
       }
@@ -216,6 +217,16 @@ export class MentorAuthController {
           .json({ message: "Invalid credentials or not a mentor" });
       }
 
+      const FIND_MENTOR_ID = `
+        SELECT mentor_id FROM Mentors WHERE user_id = ?
+      `;
+      const [mentorRows] = await pool.execute(FIND_MENTOR_ID, [user.user_id]);
+      const mentor = (mentorRows as { mentor_id: string }[])[0];
+
+      if (!mentor) {
+        return res.status(404).json({ message: "Mentor profile not found" });
+      }
+
       const token = jwt.sign(
         { user_id: user.user_id, user_type: "Mentor" },
         JWT_SECRET,
@@ -224,20 +235,23 @@ export class MentorAuthController {
 
       const cookieOptions: CookieOptions = {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production", // Ensures cookie is only sent over HTTPS
+        secure: process.env.NODE_ENV === "production",
         sameSite: "strict",
         path: "/",
       };
       res.cookie("jwtToken", token, cookieOptions);
 
-      // Response does not include sensitive data
       res.json({
         message: "Mentor login successful",
-        user: { user_id: user.user_id, email: user.email },
+        user: {
+          user_id: user.user_id,
+          mentor_id: mentor.mentor_id,
+          email: user.email,
+          jwtToken: token,
+        },
       });
     } catch (error) {
-      // Log only a generic message to avoid exposing sensitive data
-      console.error("Mentor login error: An error occurred during login");
+      console.error("Mentor login error:", error);
       res.status(500).json({ message: "Server error" });
     }
   }
@@ -251,7 +265,7 @@ export class MentorAuthController {
       }
 
       const FIND_MENTOR = `
-        SELECT mentor_id, user_id, bio, social_link, image_url, organization, is_approved
+        SELECT mentor_id, user_id, bio, social_link, organization, is_approved
         FROM Mentors
         WHERE mentor_id = ?
       `;
@@ -274,13 +288,21 @@ export class MentorAuthController {
         return res.status(404).json({ message: "Associated user not found" });
       }
 
+      // const baseUrl =
+      //   process.env.NODE_ENV === "production"
+      //     ? "https://evidently-handy-troll.ngrok-free.app"
+      //     : "http://localhost:3000";
+
+      const baseUrl = "https://evidently-handy-troll.ngrok-free.app";
+      const imageLink = `${baseUrl}/api/mentor/image/${mentor_id}`;
+
       const profile = {
         ...userData,
         mentor_id: mentorData.mentor_id,
         bio: mentorData.bio,
         social_link: mentorData.social_link,
-        image_url: mentorData.image_url,
-        organization: mentorData.organization, // Added organization to profile
+        image_link: imageLink,
+        organization: mentorData.organization,
         is_approved: mentorData.is_approved,
       };
 
@@ -295,25 +317,51 @@ export class MentorAuthController {
 
   static async updateProfile(req: AuthenticatedRequest, res: Response) {
     const connection = await pool.getConnection();
+
+    // Use a local Multer instance with 4MB limit to align with default MySQL max_allowed_packet
+    const upload = multer({
+      storage: multer.memoryStorage(),
+      limits: { fileSize: 5 * 1024 * 1024 }, // 4MB limit
+      fileFilter: (req, file, cb) => {
+        const filetypes = /jpeg|jpg|png/;
+        const extname = filetypes.test(
+          path.extname(file.originalname).toLowerCase()
+        );
+        const mimetype = filetypes.test(file.mimetype);
+        if (extname && mimetype) {
+          return cb(null, true);
+        }
+        cb(new Error("Only JPEG/JPG/PNG images are allowed"));
+      },
+    });
+
     upload.single("image")(req, res, async (err) => {
       if (err) {
-        console.error("Multer error:", err);
+        console.error("Multer error:", err.message);
         return res.status(400).json({ message: err.message });
       }
 
       try {
         const { name, email, gender, bio, social_link, organization } =
-          req.body; // Added organization
+          req.body;
         const user = req.user;
+        const file = req.file;
+
         if (!user) {
-          if (req.file) await fsPromises.unlink(req.file.path);
           return res
             .status(401)
             .json({ message: "Unauthorized: No user data" });
         }
 
         const user_id = user.user_id;
-        const imageUrl = req.file ? `/uploads/${req.file.filename}` : null;
+
+        console.log("Updating profile for user_id:", user_id);
+        if (file) {
+          console.log("Image details:", {
+            size: file.buffer.length,
+            mimetype: file.mimetype,
+          });
+        }
 
         const FIND_USER = `
           SELECT name, email, gender
@@ -322,9 +370,7 @@ export class MentorAuthController {
         `;
         const [userRows] = await pool.execute(FIND_USER, [user_id]);
         const existingUser = (userRows as User[])[0];
-
         if (!existingUser) {
-          if (req.file) await fsPromises.unlink(req.file.path);
           return res.status(404).json({ message: "User not found" });
         }
 
@@ -335,9 +381,7 @@ export class MentorAuthController {
         `;
         const [mentorRows] = await pool.execute(FIND_MENTOR, [user_id]);
         const existingMentor = (mentorRows as Mentor[])[0];
-
         if (!existingMentor) {
-          if (req.file) await fsPromises.unlink(req.file.path);
           return res.status(404).json({ message: "Mentor profile not found" });
         }
 
@@ -353,17 +397,16 @@ export class MentorAuthController {
           social_link !== undefined && social_link !== ""
             ? social_link
             : existingMentor.social_link;
-        const updatedImageUrl =
-          imageUrl !== null ? imageUrl : existingMentor.image_url;
-        const updatedOrganization = // Added organization update logic
+        const updatedImageUrl = file ? file.buffer : existingMentor.image_url;
+        const updatedOrganization =
           organization !== undefined && organization !== ""
             ? organization
             : existingMentor.organization;
 
         if (
-          updatedEmail !== existingUser.email &&
           email !== undefined &&
-          email !== ""
+          email !== "" &&
+          email !== existingUser.email
         ) {
           const CHECK_EMAIL = `
             SELECT 1 FROM Users WHERE email = ? AND user_id != ?
@@ -373,82 +416,81 @@ export class MentorAuthController {
             user_id,
           ]);
           if ((emailCheck as any[]).length > 0) {
-            if (req.file) await fsPromises.unlink(req.file.path);
             return res.status(400).json({ message: "Email already in use" });
           }
         }
+
+        if (file && file.buffer.length > 5 * 1024 * 1024) {
+          console.error("Image size exceeds 4MB:", file.buffer.length);
+          return res
+            .status(400)
+            .json({ message: "Image size exceeds 4MB limit" });
+        }
+
+        await connection.beginTransaction();
 
         const UPDATE_USER = `
           UPDATE Users
           SET name = ?, email = ?, gender = ?
           WHERE user_id = ?
         `;
+        const [userResult] = await connection.execute(UPDATE_USER, [
+          updatedName,
+          updatedEmail,
+          updatedGender,
+          user_id,
+        ]);
+        if ((userResult as any).affectedRows === 0) {
+          throw new Error("Failed to update user data");
+        }
+
         const UPDATE_MENTOR = `
           UPDATE Mentors
           SET bio = ?, social_link = ?, image_url = ?, organization = ?
           WHERE user_id = ?
         `;
-
-        try {
-          await connection.beginTransaction();
-
-          const [userResult] = await connection.execute(UPDATE_USER, [
-            updatedName,
-            updatedEmail,
-            updatedGender,
-            user_id,
-          ]);
-          if ((userResult as any).affectedRows === 0) {
-            throw new Error("Failed to update user data");
-          }
-
-          const [mentorResult] = await connection.execute(UPDATE_MENTOR, [
-            updatedBio,
-            updatedSocialLink,
-            updatedImageUrl,
-            updatedOrganization, // Added organization to update
-            user_id,
-          ]);
-          if ((mentorResult as any).affectedRows === 0) {
-            throw new Error("Failed to update mentor data");
-          }
-
-          await connection.commit();
-
-          const newToken = jwt.sign(
-            { user_id: user_id, user_type: "Mentor", email: updatedEmail },
-            JWT_SECRET,
-            { expiresIn: JWT_EXPIRES_IN }
-          );
-
-          const cookieOptions: CookieOptions = {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
-            sameSite: "strict",
-            path: "/",
-          };
-          res.cookie("jwtToken", newToken, cookieOptions);
-
-          res.status(200).json({
-            message: "Mentor profile updated successfully",
-            user: { user_id: user_id, email: updatedEmail },
-          });
-        } catch (error) {
-          if (req.file) await fsPromises.unlink(req.file.path);
-          await connection.rollback();
-          console.error("Update profile error:", error);
-          return res.status(500).json({
-            message: "Transaction failed",
-            error: (error as any).message,
-          });
-        } finally {
-          connection.release();
+        console.log(
+          "Executing UPDATE_MENTOR with image size:",
+          updatedImageUrl?.length || 0
+        );
+        const [mentorResult] = await connection.execute(UPDATE_MENTOR, [
+          updatedBio,
+          updatedSocialLink,
+          updatedImageUrl,
+          updatedOrganization,
+          user_id,
+        ]);
+        if ((mentorResult as any).affectedRows === 0) {
+          throw new Error("Failed to update mentor data");
         }
+
+        await connection.commit();
+        console.log("Transaction committed successfully");
+
+        const newToken = jwt.sign(
+          { user_id, user_type: "Mentor", email: updatedEmail },
+          JWT_SECRET,
+          { expiresIn: JWT_EXPIRES_IN }
+        );
+
+        res.status(200).json({
+          message: "Profile updated successfully",
+          user: { user_id, email: updatedEmail, new_token: newToken },
+        });
       } catch (error) {
         console.error("Update profile error:", error);
+        try {
+          await connection.rollback();
+          console.log("Rollback successful");
+        } catch (rollbackError) {
+          console.error("Rollback failed:", rollbackError);
+        }
         res
           .status(500)
           .json({ message: "Server error", error: (error as any).message });
+      } finally {
+        connection.release();
+        console.log("Connection released");
       }
     });
   }
@@ -456,20 +498,19 @@ export class MentorAuthController {
   static async getAllMentors(req: Request, res: Response) {
     try {
       const GET_ALL_MENTORS = `
-        SELECT 
-          u.user_id, 
-          u.name, 
-          u.email, 
-          u.username, 
-          u.user_type, 
-          u.gender, 
+        SELECT
+          u.user_id,
+          m.mentor_id,
+          u.name,
+          u.email,
+          u.username,
+          u.user_type,
+          u.gender,
           u.created_at AS user_created_at,
-          m.mentor_id, 
-          m.bio, 
-          m.social_link, 
-          m.image_url, 
-          m.organization, 
-          m.is_approved, 
+          m.bio,
+          m.social_link,
+          m.organization,
+          m.is_approved,
           m.created_at AS mentor_created_at
         FROM Users u
         INNER JOIN Mentors m ON u.user_id = m.user_id
@@ -490,6 +531,36 @@ export class MentorAuthController {
       });
     } catch (error) {
       console.error("Get all mentors error:", error);
+      res
+        .status(500)
+        .json({ message: "Server error", error: (error as any).message });
+    }
+  }
+
+  static async getMentorImage(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { mentor_id } = req.params;
+
+      if (!mentor_id) {
+        return res.status(400).json({ message: "Mentor ID is required" });
+      }
+
+      const FIND_MENTOR_IMAGE = `
+        SELECT image_url
+        FROM Mentors
+        WHERE mentor_id = ?
+      `;
+      const [rows] = await pool.execute(FIND_MENTOR_IMAGE, [mentor_id]);
+      const mentor = (rows as { image_url: Buffer }[])[0];
+
+      if (!mentor || !mentor.image_url) {
+        return res.status(404).json({ message: "Image not found" });
+      }
+
+      res.set("Content-Type", "image/png");
+      res.send(mentor.image_url);
+    } catch (error) {
+      console.error("Get mentor image error:", error);
       res
         .status(500)
         .json({ message: "Server error", error: (error as any).message });
