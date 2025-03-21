@@ -495,6 +495,49 @@ export class MentorAuthController {
     });
   }
 
+  // static async getAllMentors(req: Request, res: Response) {
+  //   try {
+  //     const GET_ALL_MENTORS = `
+  //       SELECT
+  //         u.user_id,
+  //         m.mentor_id,
+  //         u.name,
+  //         u.email,
+  //         u.username,
+  //         u.user_type,
+  //         u.gender,
+  //         u.created_at AS user_created_at,
+  //         m.bio,
+  //         m.social_link,
+
+  //         m.organization,
+  //         m.is_approved,
+  //         m.created_at AS mentor_created_at
+  //       FROM Users u
+  //       INNER JOIN Mentors m ON u.user_id = m.user_id
+  //       WHERE u.user_type = 'Mentor';
+  //     `;
+
+  //     const [rows] = await pool.execute(GET_ALL_MENTORS);
+  //     const mentors = rows as (User &
+  //       Mentor & { user_created_at: string; mentor_created_at: string })[];
+
+  //     if (!mentors.length) {
+  //       return res.status(404).json({ message: "No registered mentors found" });
+  //     }
+
+  //     res.status(200).json({
+  //       message: "Registered mentors retrieved successfully",
+  //       data: mentors,
+  //     });
+  //   } catch (error) {
+  //     console.error("Get all mentors error:", error);
+  //     res
+  //       .status(500)
+  //       .json({ message: "Server error", error: (error as any).message });
+  //   }
+  // }
+
   static async getAllMentors(req: Request, res: Response) {
     try {
       const GET_ALL_MENTORS = `
@@ -525,9 +568,15 @@ export class MentorAuthController {
         return res.status(404).json({ message: "No registered mentors found" });
       }
 
+      const baseUrl = "https://evidently-handy-troll.ngrok-free.app";
+      const mentorsWithImage = mentors.map((mentor) => ({
+        ...mentor,
+        image_link: `${baseUrl}/api/mentor/image/${mentor.mentor_id}`,
+      }));
+
       res.status(200).json({
         message: "Registered mentors retrieved successfully",
-        data: mentors,
+        data: mentorsWithImage,
       });
     } catch (error) {
       console.error("Get all mentors error:", error);

@@ -171,6 +171,53 @@ export class AdminAuthController {
   }
 
   // Get list of unapproved mentors
+  // static async getUnapprovedMentors(req: AuthenticatedRequest, res: Response) {
+  //   try {
+  //     const admin = req.user;
+
+  //     if (!admin || admin.user_type !== "Admin") {
+  //       return res.status(403).json({ message: "Unauthorized: Admins only" });
+  //     }
+
+  //     const GET_UNAPPROVED_MENTORS = `
+  //       SELECT
+  //         m.user_id,
+  //         m.mentor_id,
+  //         u.name,
+  //         u.email,
+  //         u.username,
+  //         u.gender,
+  //         m.bio,
+  //         m.is_approved,
+  //         m.social_link,
+  //         m.image_url,
+  //         m.organization
+  //       FROM Mentors m
+  //       INNER JOIN Users u ON m.user_id = u.user_id
+  //       WHERE m.is_approved = FALSE;
+  //     `;
+
+  //     const [rows] = await pool.execute(GET_UNAPPROVED_MENTORS);
+  //     const unapprovedMentors = rows as (Mentor & User)[];
+
+  //     if (!unapprovedMentors.length) {
+  //       return res
+  //         .status(200)
+  //         .json({ message: "No unapproved mentors found", data: [] });
+  //     }
+
+  //     res.status(200).json({
+  //       message: "Unapproved mentors retrieved successfully",
+  //       data: unapprovedMentors,
+  //     });
+  //   } catch (error) {
+  //     console.error("Get unapproved mentors error:", error);
+  //     res
+  //       .status(500)
+  //       .json({ message: "Server error", error: (error as any).message });
+  //   }
+  // }
+
   static async getUnapprovedMentors(req: AuthenticatedRequest, res: Response) {
     try {
       const admin = req.user;
@@ -206,9 +253,17 @@ export class AdminAuthController {
           .json({ message: "No unapproved mentors found", data: [] });
       }
 
+      const baseUrl = "https://evidently-handy-troll.ngrok-free.app";
+      const mentorsWithImageLinks = unapprovedMentors.map((mentor) => ({
+        ...mentor,
+        image_url: mentor.image_url
+          ? `${baseUrl}/api/mentor/image/${mentor.mentor_id}`
+          : null,
+      }));
+
       res.status(200).json({
         message: "Unapproved mentors retrieved successfully",
-        data: unapprovedMentors,
+        data: mentorsWithImageLinks,
       });
     } catch (error) {
       console.error("Get unapproved mentors error:", error);
@@ -350,15 +405,4 @@ export class AdminAuthController {
       connection.release();
     }
   }
-
-  // Logout (clear cookie)
-  // static async logout(req: AuthenticatedRequest, res: Response) {
-  //   res.clearCookie("jwtToken", {
-  //     httpOnly: true,
-  //     secure: process.env.NODE_ENV === "production",
-  //     sameSite: "strict",
-  //     path: "/",
-  //   });
-  //   res.status(200).json({ message: "Admin logged out successfully" });
-  // }
 }
