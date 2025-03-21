@@ -424,4 +424,96 @@ export class MentorSessionController {
       res.status(500).json({ message: "Server error" });
     }
   }
+
+  static async deleteSession(req: AuthenticatedRequest, res: Response) {
+    const { session_id } = req.params; // Extract session_id from the URL
+    const user_id = req.user?.user_id; // Extract user_id from the decoded JWT token
+
+    if (!session_id) {
+      return res.status(400).json({ message: "Session ID is required" });
+    }
+
+    if (!user_id) {
+      return res.status(401).json({ message: "Unauthorized: No user ID" });
+    }
+
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+
+      // Step 1: Fetch the mentor_id of the logged-in user
+      const FIND_MENTOR = `
+        SELECT mentor_id FROM Mentors WHERE user_id = ?
+      `;
+      const [mentorRows] = await connection.execute(FIND_MENTOR, [user_id]);
+      const mentor = (mentorRows as { mentor_id: string }[])[0];
+
+      if (!mentor) {
+        await connection.rollback();
+        return res.status(404).json({ message: "Mentor not found" });
+      }
+
+      const mentor_id = mentor.mentor_id;
+
+      // Step 2: Verify that the session belongs to the logged-in mentor
+      const VERIFY_SESSION = `
+        SELECT mentor_id FROM Sessions WHERE session_id = ?
+      `;
+      const [sessionRows] = await connection.execute(VERIFY_SESSION, [
+        session_id,
+      ]);
+      const session = (sessionRows as { mentor_id: string }[])[0];
+
+      if (!session) {
+        await connection.rollback();
+        return res.status(404).json({ message: "Session not found" });
+      }
+
+      if (session.mentor_id !== mentor_id) {
+        await connection.rollback();
+        return res.status(403).json({
+          message: "Forbidden: You are not authorized to delete this session",
+        });
+      }
+
+      // Step 3: Delete availability details associated with the session
+      const DELETE_AVAILABILITY_DETAILS = `
+        DELETE FROM Availability_Details
+        WHERE availability_id IN (
+          SELECT availability_id FROM Mentor_Availability WHERE session_id = ?
+        )
+      `;
+      await connection.execute(DELETE_AVAILABILITY_DETAILS, [session_id]);
+
+      // Step 4: Delete availability records associated with the session
+      const DELETE_AVAILABILITY = `
+        DELETE FROM Mentor_Availability
+        WHERE session_id = ?
+      `;
+      await connection.execute(DELETE_AVAILABILITY, [session_id]);
+
+      // Step 5: Delete the session
+      const DELETE_SESSION = `
+        DELETE FROM Sessions
+        WHERE session_id = ?
+      `;
+      const [result] = await connection.execute(DELETE_SESSION, [session_id]);
+
+      // Check if the session was deleted
+      if ((result as any).affectedRows === 0) {
+        await connection.rollback();
+        return res.status(404).json({ message: "Session not found" });
+      }
+
+      await connection.commit();
+
+      res.status(200).json({ message: "Session deleted successfully" });
+    } catch (error) {
+      await connection.rollback();
+      console.error("Delete session error:", error);
+      res.status(500).json({ message: "Server error" });
+    } finally {
+      connection.release();
+    }
+  }
 }

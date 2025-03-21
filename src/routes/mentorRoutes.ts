@@ -110,6 +110,7 @@ router
     updateMentorInterests as RequestHandler
   );
 
+// Mentor one to one session Routes
 router
   .post(
     "/addSessions",
@@ -120,11 +121,15 @@ router
     "/sessions/availability",
     authenticateToken as RequestHandler,
     MentorSessionController.getSessionDetails as RequestHandler
+  )
+  .get(
+    "/session_details/:mentor_id",
+    MentorSessionController.getPublicSessionDetails as RequestHandler
+  )
+  .delete(
+    "/session/deleteOne/:session_id",
+    authenticateToken as RequestHandler,
+    MentorSessionController.deleteSession as RequestHandler
   );
-
-router.get(
-  "/session_details/:mentor_id",
-  MentorSessionController.getPublicSessionDetails as RequestHandler
-);
 
 export default router;
