@@ -122,4 +122,9 @@ router
     MentorSessionController.getSessionDetails as RequestHandler
   );
 
+router.get(
+  "/session_details/:mentor_id",
+  MentorSessionController.getPublicSessionDetails as RequestHandler
+);
+
 export default router;

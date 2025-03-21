@@ -29,9 +29,9 @@ interface AvailabilityDetail {
 
 // Google OAuth2 Client
 const oauth2Client = new OAuth2Client(
-  process.env.GOOGLE_CLIENT_ID, // From your Google Cloud credentials
-  process.env.GOOGLE_CLIENT_SECRET, // From your Google Cloud credentials
-  process.env.GOOGLE_REDIRECT_URI // Your redirect URI
+  process.env.GOOGLE_CLIENT_ID,
+  process.env.GOOGLE_CLIENT_SECRET,
+  process.env.GOOGLE_REDIRECT_URI
 );
 
 // Set up Google Calendar API
@@ -46,7 +46,7 @@ export class MentorSessionController {
   ): Promise<string> {
     try {
       oauth2Client.setCredentials({
-        refresh_token: process.env.GOOGLE_REFRESH_TOKEN, // Ensure this is set
+        refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
       });
 
       // Create a calendar event with a Google Meet link
@@ -62,7 +62,7 @@ export class MentorSessionController {
         },
         conferenceData: {
           createRequest: {
-            requestId: uuidv4(), // Unique request ID
+            requestId: uuidv4(),
             conferenceSolutionKey: {
               type: "hangoutsMeet",
             },
@@ -71,9 +71,9 @@ export class MentorSessionController {
       };
 
       const response = await calendar.events.insert({
-        calendarId: "primary", // Use the primary calendar
+        calendarId: "primary",
         requestBody: event,
-        conferenceDataVersion: 1, // Enable conference data (Google Meet link)
+        conferenceDataVersion: 1,
       });
 
       // Return the Google Meet link
@@ -123,7 +123,7 @@ export class MentorSessionController {
         return res.status(404).json({ message: "Mentor not found" });
       }
 
-      const mentor_id = mentor.mentor_id; // Use the mentor_id from the Mentors table
+      const mentor_id = mentor.mentor_id;
 
       // Step 2: Create the session
       const session_id = uuidv4();
@@ -247,7 +247,7 @@ export class MentorSessionController {
         return res.status(404).json({ message: "Mentor not found" });
       }
 
-      const mentor_id = mentor.mentor_id; // Use the mentor_id from the Mentors table
+      const mentor_id = mentor.mentor_id;
 
       // Step 2: Fetch all sessions for the mentor
       const GET_SESSIONS = `
@@ -284,11 +284,9 @@ export class MentorSessionController {
           ]);
           const availabilityDetails = availabilityRows as AvailabilityDetail[];
 
-          // Group availability details by date
           const groupedAvailability: { [key: string]: AvailabilityDetail[] } =
             {};
           for (const detail of availabilityDetails) {
-            // Simplify the date format to YYYY-MM-DD
             const date = new Date(detail.available_date)
               .toISOString()
               .split("T")[0];
@@ -296,18 +294,15 @@ export class MentorSessionController {
               groupedAvailability[date] = [];
             }
 
-            // Prepare the availability detail object
             const availabilityDetail: any = {
-              start_time: detail.start_time.slice(0, 5), // Simplify time to HH:MM
+              start_time: detail.start_time.slice(0, 5),
               status: detail.status,
             };
 
-            // Include meeting_link for online sessions
             if (session.medium === "Online") {
               availabilityDetail.meeting_link = detail.meeting_link;
             }
 
-            // Include offline_address for offline sessions
             if (session.medium === "Offline") {
               availabilityDetail.offline_address = detail.offline_address;
             }
@@ -334,6 +329,98 @@ export class MentorSessionController {
       });
     } catch (error) {
       console.error("Get all sessions error:", error);
+      res.status(500).json({ message: "Server error" });
+    }
+  }
+
+  static async getPublicSessionDetails(req: Request, res: Response) {
+    const { mentor_id } = req.params;
+
+    if (!mentor_id) {
+      return res.status(400).json({ message: "Mentor ID is required" });
+    }
+
+    try {
+      // Step 1: Fetch all sessions for the specified mentor
+      const GET_SESSIONS = `
+        SELECT session_id, session_title, duration_mins, price, medium, created_at
+        FROM Sessions
+        WHERE mentor_id = ?
+      `;
+      const [sessionRows] = await pool.execute(GET_SESSIONS, [mentor_id]);
+      const sessions = sessionRows as Session[];
+
+      if (sessions.length === 0) {
+        return res
+          .status(404)
+          .json({ message: "No sessions found for this mentor" });
+      }
+
+      // Step 2: Fetch availability details for each session
+      const sessionsWithAvailability = await Promise.all(
+        sessions.map(async (session) => {
+          const GET_AVAILABILITY = `
+            SELECT
+              a.available_date,
+              d.start_time,
+              d.meeting_link,
+              d.offline_address,
+              d.status
+            FROM Mentor_Availability a
+            INNER JOIN Availability_Details d ON a.availability_id = d.availability_id
+            WHERE a.session_id = ?
+            ORDER BY a.available_date, d.start_time
+          `;
+          const [availabilityRows] = await pool.execute(GET_AVAILABILITY, [
+            session.session_id,
+          ]);
+          const availabilityDetails = availabilityRows as AvailabilityDetail[];
+
+          const groupedAvailability: { [key: string]: AvailabilityDetail[] } =
+            {};
+          for (const detail of availabilityDetails) {
+            const date = new Date(detail.available_date)
+              .toISOString()
+              .split("T")[0];
+            if (!groupedAvailability[date]) {
+              groupedAvailability[date] = [];
+            }
+
+            const availabilityDetail: any = {
+              start_time: detail.start_time.slice(0, 5),
+              status: detail.status,
+            };
+
+            if (session.medium === "Online") {
+              availabilityDetail.meeting_link = detail.meeting_link;
+            }
+
+            if (session.medium === "Offline") {
+              availabilityDetail.offline_address = detail.offline_address;
+            }
+
+            groupedAvailability[date].push(availabilityDetail);
+          }
+
+          return {
+            session: {
+              session_id: session.session_id,
+              session_title: session.session_title,
+              duration_mins: session.duration_mins,
+              price: session.price,
+              medium: session.medium,
+            },
+            availability: groupedAvailability,
+          };
+        })
+      );
+
+      res.status(200).json({
+        message: "All sessions retrieved successfully",
+        data: sessionsWithAvailability,
+      });
+    } catch (error) {
+      console.error("Get public session details error:", error);
       res.status(500).json({ message: "Server error" });
     }
   }
