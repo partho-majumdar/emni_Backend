@@ -217,14 +217,24 @@ export class MentorAuthController {
           .json({ message: "Invalid credentials or not a mentor" });
       }
 
-      const FIND_MENTOR_ID = `
-        SELECT mentor_id FROM Mentors WHERE user_id = ?
+      const FIND_MENTOR = `
+        SELECT mentor_id, is_approved FROM Mentors WHERE user_id = ?
       `;
-      const [mentorRows] = await pool.execute(FIND_MENTOR_ID, [user.user_id]);
-      const mentor = (mentorRows as { mentor_id: string }[])[0];
+      const [mentorRows] = await pool.execute(FIND_MENTOR, [user.user_id]);
+      const mentor = (
+        mentorRows as { mentor_id: string; is_approved: boolean }[]
+      )[0];
 
       if (!mentor) {
         return res.status(404).json({ message: "Mentor profile not found" });
+      }
+
+      // Check if mentor is approved
+      if (!mentor.is_approved) {
+        return res.status(403).json({
+          message:
+            "Your account is pending approval. Please wait for admin approval.",
+        });
       }
 
       const token = jwt.sign(

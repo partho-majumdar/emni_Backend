@@ -426,8 +426,8 @@ export class MentorSessionController {
   }
 
   static async deleteSession(req: AuthenticatedRequest, res: Response) {
-    const { session_id } = req.params; // Extract session_id from the URL
-    const user_id = req.user?.user_id; // Extract user_id from the decoded JWT token
+    const { session_id } = req.params;
+    const user_id = req.user?.user_id;
 
     if (!session_id) {
       return res.status(400).json({ message: "Session ID is required" });
