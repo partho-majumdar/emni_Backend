@@ -7,6 +7,7 @@ import {
   updateStudentInterests,
 } from "../controllers/student/interestController";
 import { getSuggestedMentors } from "../controllers/student/mentorSuggestionController";
+import MentorAvailabilityController from "../controllers/student/studentSeeMentorFreeTime";
 
 const router = Router();
 
@@ -57,6 +58,11 @@ router.put(
   "/interests/update",
   authenticateToken as express.RequestHandler,
   updateStudentInterests as express.RequestHandler
+);
+
+router.get(
+  "/mavaliableat/:mentorId",
+  MentorAvailabilityController.getMentorAvailability as express.RequestHandler
 );
 
 export default router;

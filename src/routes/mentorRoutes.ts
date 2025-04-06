@@ -1,64 +1,3 @@
-// import express, { Router } from "express";
-// import { MentorAuthController } from "../controllers/mentor/authController";
-// import { authenticateToken } from "../middleware/auth";
-// import {
-//   getMentorInterests,
-//   addMentorInterests,
-//   updateMentorInterests,
-// } from "../controllers/mentor/interestController";
-
-// import { SessionController } from "../controllers/mentor/mentorTimeController";
-
-// const router = Router();
-
-// router
-//   .get(
-//     "/image/:mentor_id",
-//     MentorAuthController.getMentorImage as express.RequestHandler
-//   )
-//   .get("/all", MentorAuthController.getAllMentors as express.RequestHandler)
-//   .post("/register", MentorAuthController.register as express.RequestHandler)
-//   .post("/login", MentorAuthController.login as express.RequestHandler)
-//   .get("/:mentor_id", MentorAuthController.getProfile as express.RequestHandler)
-//   .put(
-//     "/profile/edit",
-//     authenticateToken as express.RequestHandler,
-//     MentorAuthController.updateProfile as express.RequestHandler
-//   )
-//   .get(
-//     "/interests/list",
-//     authenticateToken as express.RequestHandler,
-//     getMentorInterests as express.RequestHandler
-//   )
-//   .post(
-//     "/interests/add",
-//     authenticateToken as express.RequestHandler,
-//     addMentorInterests as express.RequestHandler
-//   )
-//   .put(
-//     "/interests/update",
-//     authenticateToken as express.RequestHandler,
-//     updateMentorInterests as express.RequestHandler
-//   );
-
-// router.post(
-//   "/addSessions",
-//   authenticateToken as express.RequestHandler,
-//   SessionController.createSession as express.RequestHandler
-// );
-// router.post(
-//   "/sessions/availability",
-//   authenticateToken as express.RequestHandler,
-//   SessionController.setAvailability as express.RequestHandler
-// );
-// router.get(
-//   "/sessions",
-//   authenticateToken as express.RequestHandler,
-//   SessionController.getMentorAvailability as express.RequestHandler
-// );
-
-// export default router;
-
 import express, { Router, RequestHandler } from "express";
 import { MentorAuthController } from "../controllers/mentor/authController";
 import { authenticateToken } from "../middleware/auth";
@@ -68,7 +7,9 @@ import {
   updateMentorInterests,
 } from "../controllers/mentor/interestController";
 
-import { MentorSessionController } from "../controllers/mentor/mentorTimeController";
+import { MentorAvailabilityController } from "../controllers/mentor/mentorTimeController";
+
+import oneOnOneSessionController from "../controllers/mentor/oneOnOneSessionController";
 
 interface AuthenticatedRequest extends express.Request {
   user?: { user_id: string; user_type: string };
@@ -112,24 +53,27 @@ router
 
 // Mentor one to one session Routes
 router
+  .get(
+    "/m/availability",
+    authenticateToken as RequestHandler,
+    MentorAvailabilityController.getAvailabilities as RequestHandler
+  )
   .post(
-    "/addSessions",
+    "/avalability/add",
     authenticateToken as RequestHandler,
-    MentorSessionController.createSessionWithAvailability as RequestHandler
+    MentorAvailabilityController.addAvailability as RequestHandler
+  );
+
+router
+  .post(
+    "/sessions/add",
+    authenticateToken as RequestHandler,
+    oneOnOneSessionController.createSession as RequestHandler
   )
   .get(
-    "/sessions/availability",
+    "/m/sessions",
     authenticateToken as RequestHandler,
-    MentorSessionController.getSessionDetails as RequestHandler
-  )
-  .get(
-    "/session_details/:mentor_id",
-    MentorSessionController.getPublicSessionDetails as RequestHandler
-  )
-  .delete(
-    "/session/deleteOne/:session_id",
-    authenticateToken as RequestHandler,
-    MentorSessionController.deleteSession as RequestHandler
+    oneOnOneSessionController.getSession as RequestHandler
   );
 
 export default router;

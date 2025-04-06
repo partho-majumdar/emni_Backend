@@ -7,7 +7,7 @@ import { v4 as uuidv4 } from "uuid";
 import multer from "multer";
 import { CookieOptions } from "express";
 import path from "path";
-import fs from "fs";
+// import fs from "fs";
 
 interface User {
   user_id: string;
@@ -24,7 +24,7 @@ interface Mentor {
   user_id: string;
   bio: string;
   social_link: string | null;
-  image_url: Buffer | null; // BLOB storage
+  image_url: Buffer | null;
   organization: string | null;
   is_approved: boolean;
 }
@@ -328,7 +328,6 @@ export class MentorAuthController {
   static async updateProfile(req: AuthenticatedRequest, res: Response) {
     const connection = await pool.getConnection();
 
-    // Use a local Multer instance with 4MB limit to align with default MySQL max_allowed_packet
     const upload = multer({
       storage: multer.memoryStorage(),
       limits: { fileSize: 5 * 1024 * 1024 }, // 4MB limit

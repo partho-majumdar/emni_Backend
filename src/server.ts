@@ -34,7 +34,7 @@ import mentorRoutes from "./routes/mentorRoutes";
 import adminRoutes from "./routes/adminRoutes";
 import { getAllInterests } from "./controllers/common/interestController";
 import { AdminAuthController } from "./controllers/admin/authController";
-import oauthRoutes from "./routes/oauthRoutes"; // Import the new OAuth routes
+// import oauthRoutes from "./routes/oauthRoutes"; // Import the new OAuth routes
 
 // Load environment variables
 dotenv.config({ path: "../.env" });
@@ -52,7 +52,7 @@ app.use("/api/student", studentRoutes);
 app.use("/api/mentor", mentorRoutes);
 app.use("/api/admin", adminRoutes);
 
-app.use("/", oauthRoutes);
+// app.use("/", oauthRoutes);
 
 app.get("/api/interests", getAllInterests);
 
