@@ -1,6 +1,10 @@
 import express, { Router, RequestHandler } from "express";
 import { MentorAuthController } from "../controllers/mentor/authController";
-import { authenticateToken } from "../middleware/auth";
+import {
+  authenticateToken,
+  requireAnyAuthenticated,
+  requireMentor,
+} from "../middleware/auth";
 import {
   getMentorInterests,
   addMentorInterests,
@@ -26,7 +30,12 @@ router
   .get("/all", MentorAuthController.getAllMentors as RequestHandler)
   .post("/register", MentorAuthController.register as RequestHandler)
   .post("/login", MentorAuthController.login as RequestHandler)
-  .get("/:mentor_id", MentorAuthController.getProfile as RequestHandler)
+  .get(
+    "/:mentor_id",
+    authenticateToken as RequestHandler,
+    requireAnyAuthenticated as RequestHandler,
+    MentorAuthController.getProfile as RequestHandler
+  )
   .put(
     "/profile/edit",
     authenticateToken as RequestHandler,
@@ -59,7 +68,7 @@ router
     MentorAvailabilityController.getAvailabilities as RequestHandler
   )
   .post(
-    "/avalability/add",
+    "/availability/add",
     authenticateToken as RequestHandler,
     MentorAvailabilityController.addAvailability as RequestHandler
   );

@@ -1,6 +1,11 @@
 import express, { Router } from "express";
 import { StudentAuthController } from "../controllers/student/authController";
-import { authenticateToken } from "../middleware/auth";
+import {
+  authenticateToken,
+  requireStudent,
+  requireAnyAuthenticated,
+} from "../middleware/auth";
+
 import {
   getStudentInterests,
   addStudentInterests,

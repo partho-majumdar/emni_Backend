@@ -27,6 +27,16 @@
 //   console.log(`Server running on port ${PORT}`);
 // });
 
+
+
+
+
+
+
+
+
+
+
 import express from "express";
 import dotenv from "dotenv";
 import studentRoutes from "./routes/studentRoutes";

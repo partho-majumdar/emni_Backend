@@ -1,6 +1,10 @@
 import express, { Router } from "express";
 import { AdminAuthController } from "../controllers/admin/authController";
-import { authenticateToken } from "../middleware/auth";
+import {
+  authenticateToken,
+  requireAnyAuthenticated,
+  requireAdmin,
+} from "../middleware/auth";
 
 const router = Router();
 
