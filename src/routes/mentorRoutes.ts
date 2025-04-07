@@ -63,16 +63,18 @@ router
     updateMentorInterests as RequestHandler
   );
 
-// Mentor one to one session Routes
+// Mentor one to one session availability time Routes
 router
   .get(
     "/m/availability",
     authenticateToken as RequestHandler,
+    requireMentor as RequestHandler,
     MentorAvailabilityController.getAvailabilities as RequestHandler
   )
   .post(
-    "/availability/add",
+    "/avalability/add",
     authenticateToken as RequestHandler,
+    requireMentor as RequestHandler,
     MentorAvailabilityController.addAvailability as RequestHandler
   );
 
