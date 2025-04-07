@@ -18,12 +18,14 @@ router.post("/login", AdminAuthController.login as express.RequestHandler);
 router.get(
   "/mentors/unapproved",
   authenticateToken as express.RequestHandler,
+  requireAdmin as express.RequestHandler,
   AdminAuthController.getUnapprovedMentors as express.RequestHandler
 );
 
 router.post(
   "/mentor/approve",
   authenticateToken as express.RequestHandler,
+  requireAdmin as express.RequestHandler,
   AdminAuthController.approveMentor as express.RequestHandler
 );
 

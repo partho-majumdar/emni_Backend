@@ -10,13 +10,9 @@ import {
   addMentorInterests,
   updateMentorInterests,
 } from "../controllers/mentor/interestController";
-
 import { MentorAvailabilityController } from "../controllers/mentor/mentorTimeController";
-
-import oneOnOneSessionController from "../controllers/mentor/oneOnOneSessionController";
-
+import { oneOnOneSessionController } from "../controllers/mentor/oneOnOneSessionController";
 import GroupSessionController from "../controllers/mentor/groupSessionCreate";
-// import { group } from "console";
 
 interface AuthenticatedRequest extends express.Request {
   user?: { user_id: string; user_type: string };
@@ -78,17 +74,18 @@ router
     MentorAvailabilityController.addAvailability as RequestHandler
   );
 
-router
-  .post(
-    "/sessions/add",
-    authenticateToken as RequestHandler,
-    oneOnOneSessionController.createSession as RequestHandler
-  )
-  .get(
-    "/m/sessions",
-    authenticateToken as RequestHandler,
-    oneOnOneSessionController.getSession as RequestHandler
-  );
+// mentor session details
+router.post(
+  "/sessions/new",
+  authenticateToken as RequestHandler,
+  requireMentor as RequestHandler,
+  oneOnOneSessionController.createSession as RequestHandler
+);
+// .get(
+//   "/m/sessions",
+//   authenticateToken as RequestHandler,
+//   oneOnOneSessionController.getSession as RequestHandler
+// );
 
 router
   .post(
