@@ -4,6 +4,7 @@ import {
   authenticateToken,
   requireAnyAuthenticated,
   requireMentor,
+  requireMentorOrStudent,
 } from "../middleware/auth";
 import {
   getMentorInterests,
@@ -74,19 +75,28 @@ router
     MentorAvailabilityController.addAvailability as RequestHandler
   );
 
-// mentor session details
-router.post(
-  "/sessions/new",
-  authenticateToken as RequestHandler,
-  requireMentor as RequestHandler,
-  oneOnOneSessionController.createSession as RequestHandler
-);
-// .get(
-//   "/m/sessions",
-//   authenticateToken as RequestHandler,
-//   oneOnOneSessionController.getSession as RequestHandler
-// );
+// mentor 1:1 session details
+router
+  .post(
+    "/sessions/new",
+    authenticateToken as RequestHandler,
+    requireMentor as RequestHandler,
+    oneOnOneSessionController.createSession as RequestHandler
+  )
+  .get(
+    "/sessions/mentor",
+    authenticateToken as RequestHandler,
+    requireMentor as RequestHandler,
+    oneOnOneSessionController.getSessionListForParticularMentor as RequestHandler
+  )
+  // .get(
+  //   "/sessions/:sessionId",
+  //   authenticateToken as RequestHandler,
+  //   requireMentorOrStudent as RequestHandler,
+  //   oneOnOneSessionController.getSessionById as RequestHandler
+  // );
 
+// mentor create group session details
 router
   .post(
     "/groupsessions/create",
