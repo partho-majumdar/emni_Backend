@@ -189,7 +189,7 @@ router.post(
 
 // C.2 Get Availability List
 router.get(
-  "/availability",
+  "/availability/list",
   authenticateToken as express.RequestHandler,
   requireMentor as express.RequestHandler,
   MentorAvailabilityController.getAvailabilities as express.RequestHandler

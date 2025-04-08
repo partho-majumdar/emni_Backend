@@ -1,15 +1,3 @@
-// import express, { Router, express.RequestHandler } from "express";
-// import {
-//   authenticateToken,
-//   requireAnyAuthenticated,
-//   requireMentor,
-//   requireMentorOrStudent,
-// } from "../middleware/auth";
-
-// const router = Router();
-
-// export default router;
-
 import express, { Router } from "express";
 import {
   authenticateToken,

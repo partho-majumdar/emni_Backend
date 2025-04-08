@@ -196,9 +196,9 @@ export const authenticateToken = async (
   next: NextFunction
 ) => {
   const authHeader = req.headers["authorization"];
-  console.log("Auth Header:", authHeader); // Debug log
+  console.log("Auth Header:", authHeader);
   const token = authHeader && authHeader.split(" ")[1];
-  console.log("Token:", token); // Debug log
+  console.log("Token:", token);
 
   if (!token) {
     return res.status(401).json({ message: "No token provided" });
@@ -206,7 +206,7 @@ export const authenticateToken = async (
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;
-    console.log("Decoded token:", decoded); // Debug log
+    console.log("Decoded token:", decoded);
 
     if (!decoded.user_type) {
       return res
@@ -214,7 +214,6 @@ export const authenticateToken = async (
         .json({ message: "Invalid token: missing user type" });
     }
 
-    // Do NOT normalize user_type here; keep it as is to match database
     req.user = decoded;
     next();
   } catch (err) {
@@ -230,13 +229,13 @@ const checkRole = (
   errorMessage: string
 ): boolean => {
   if (!req.user) {
-    console.log("checkRole: No user in request"); // Debug log
+    console.log("checkRole: No user in request");
     return false;
   }
 
   const userType = req.user.user_type; // Keep original case
   const isAllowed = allowedRoles.includes(userType);
-  console.log(`checkRole: user_type=${userType}, allowed=${isAllowed}`); // Debug log
+  console.log(`checkRole: user_type=${userType}, allowed=${isAllowed}`);
   return isAllowed;
 };
 
@@ -350,7 +349,7 @@ export const requireAnyAuthenticated = (
   next: NextFunction
 ) => {
   if (!req.user) {
-    console.log("requireAnyAuthenticated: No user in request"); // Debug log
+    console.log("requireAnyAuthenticated: No user in request");
     return res.status(403).json({ message: "Authentication required" });
   }
   next();
