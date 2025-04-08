@@ -89,12 +89,12 @@ router
     requireMentor as RequestHandler,
     oneOnOneSessionController.getSessionListForParticularMentor as RequestHandler
   )
-  // .get(
-  //   "/sessions/:sessionId",
-  //   authenticateToken as RequestHandler,
-  //   requireMentorOrStudent as RequestHandler,
-  //   oneOnOneSessionController.getSessionById as RequestHandler
-  // );
+  .get(
+    "/sessions/:sessionId",
+    authenticateToken as RequestHandler,
+    requireMentorOrStudent as RequestHandler,
+    oneOnOneSessionController.getSessionById as RequestHandler
+  );
 
 // mentor create group session details
 router

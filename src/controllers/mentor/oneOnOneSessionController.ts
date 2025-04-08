@@ -476,4 +476,77 @@ export class oneOnOneSessionController {
       connection.release();
     }
   }
+
+  static async getSessionById(req: AuthenticatedRequest, res: Response) {
+    const user_id = req.user?.user_id;
+    const sessionId = req.params.sessionId;
+
+    if (!user_id) {
+      return res
+        .status(401)
+        .json({ message: "Unauthorized: No valid authentication token" });
+    }
+
+    if (!sessionId) {
+      return res.status(400).json({ message: "Session ID is required" });
+    }
+
+    const connection = await pool.getConnection();
+    try {
+      const [sessionRows] = await connection.execute(
+        `SELECT 
+          s.session_id,
+          s.mentor_id,
+          u.name AS mentor_name,
+          m.image_url,
+          s.type,
+          s.session_title AS title,
+          s.duration_mins,
+          s.is_online,
+          s.is_offline,
+          s.description
+        FROM Sessions s
+        JOIN Mentors m ON s.mentor_id = m.mentor_id
+        JOIN Users u ON m.user_id = u.user_id
+        WHERE s.session_id = ?`,
+        [sessionId]
+      );
+
+      const sessionData = (sessionRows as any[])[0];
+      if (!sessionData) {
+        return res.status(404).json({ message: "Session not found" });
+      }
+
+      const session_medium: ("online" | "offline")[] = [];
+      if (sessionData.is_online) session_medium.push("online");
+      if (sessionData.is_offline) session_medium.push("offline");
+
+      const baseUrl = "https://evidently-handy-troll.ngrok-free.app";
+      const mentorImageLink = sessionData.image_url
+        ? `${baseUrl}/api/mentor/image/${sessionData.mentor_id}`
+        : "";
+
+      const sessionInfo: SessionInfo = {
+        sessionId: sessionData.session_id,
+        mentorId: sessionData.mentor_id,
+        mentorName: sessionData.mentor_name,
+        mentorImageLink,
+        type: sessionData.type,
+        title: sessionData.title,
+        DurationInMinutes: sessionData.duration_mins,
+        session_medium,
+        Description: sessionData.description,
+      };
+
+      res.status(200).json({
+        success: true,
+        data: sessionInfo,
+      });
+    } catch (error) {
+      console.error("Get session by ID error:", error);
+      res.status(500).json({ message: "Server error" });
+    } finally {
+      connection.release();
+    }
+  }
 }
