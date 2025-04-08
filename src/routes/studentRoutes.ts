@@ -46,7 +46,6 @@ router.put(
 );
 
 // Interest-related routes
-
 router.get(
   "/interests/list",
   authenticateToken as express.RequestHandler,
