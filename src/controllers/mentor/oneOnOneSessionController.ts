@@ -549,4 +549,244 @@ export class oneOnOneSessionController {
       connection.release();
     }
   }
+
+  static async getInterestBasedSessionsForStudent(
+    req: AuthenticatedRequest,
+    res: Response
+  ) {
+    const user_id = req.user?.user_id;
+    const connection = await pool.getConnection();
+
+    try {
+      if (!user_id) {
+        return res
+          .status(401)
+          .json({ message: "Unauthorized: No valid authentication token" });
+      }
+
+      // Verify the user is a student
+      const [studentRows] = await connection.execute(
+        "SELECT student_id FROM Students WHERE user_id = ?",
+        [user_id]
+      );
+
+      if (!Array.isArray(studentRows) || studentRows.length === 0) {
+        return res
+          .status(403)
+          .json({ message: "User is not a registered student" });
+      }
+
+      // Get the student's interests
+      const [interestRows] = await connection.execute(
+        `SELECT i.interest_id
+         FROM User_Interests ui
+         JOIN Interests i ON ui.interest_id = i.interest_id
+         WHERE ui.user_id = ?`,
+        [user_id]
+      );
+
+      if (!Array.isArray(interestRows) || interestRows.length === 0) {
+        return res.status(200).json({
+          success: true,
+          data: [],
+          message:
+            "No interests found for this student. Please add interests to your profile",
+        });
+      }
+
+      const interestIds = (interestRows as { interest_id: string }[]).map(
+        (row) => row.interest_id
+      );
+
+      // Get one-on-one sessions from mentors who share at least one interest
+      const [sessionRows] = await connection.execute(
+        `SELECT DISTINCT
+          s.session_id AS sessionId,
+          s.mentor_id AS mentorId,
+          u.name AS mentorName,
+          m.image_url AS mentorImage,
+          s.type,
+          s.session_title AS title,
+          s.duration_mins AS DurationInMinutes,
+          s.is_online,
+          s.is_offline,
+          s.description
+        FROM Sessions s
+        JOIN Mentors m ON s.mentor_id = m.mentor_id
+        JOIN Users u ON m.user_id = u.user_id
+        JOIN User_Interests ui ON m.user_id = ui.user_id
+        WHERE ui.interest_id IN (${interestIds.map(() => "?").join(",")})
+        ORDER BY s.created_at ASC`,
+        [...interestIds]
+      );
+
+      const sessions = (sessionRows as any[]).map((row) => {
+        const session_medium: ("online" | "offline")[] = [];
+        if (row.is_online) session_medium.push("online");
+        if (row.is_offline) session_medium.push("offline");
+
+        const baseUrl = "https://evidently-handy-troll.ngrok-free.app";
+        const mentorImageLink = row.mentorImage
+          ? `${baseUrl}/api/mentor/image/${row.mentorId}`
+          : "";
+
+        return {
+          sessionId: row.sessionId,
+          mentorId: row.mentorId,
+          mentorName: row.mentorName,
+          mentorImageLink,
+          type: row.type,
+          title: row.title,
+          DurationInMinutes: row.DurationInMinutes,
+          session_medium,
+          Description: row.description,
+        } as SessionInfo;
+      });
+
+      res.status(200).json({
+        success: true,
+        data: sessions,
+      });
+    } catch (error) {
+      console.error("Get interest-based sessions error:", error);
+      res.status(500).json({ message: "Server error" });
+    } finally {
+      connection.release();
+    }
+  }
+
+  static async getNonInterestBasedSessionsForStudent(req: AuthenticatedRequest, res: Response) {
+    const user_id = req.user?.user_id;
+    const connection = await pool.getConnection();
+    
+    try {
+      if (!user_id) {
+        return res.status(401).json({ message: "Unauthorized: No valid authentication token" });
+      }
+  
+      // Verify the user is a student
+      const [studentRows] = await connection.execute(
+        "SELECT student_id FROM Students WHERE user_id = ?",
+        [user_id]
+      );
+      
+      if (!Array.isArray(studentRows) || studentRows.length === 0) {
+        return res.status(403).json({ message: "User is not a registered student" });
+      }
+  
+      // Get the student's interests
+      const [interestRows] = await connection.execute(
+        `SELECT i.interest_id
+         FROM User_Interests ui
+         JOIN Interests i ON ui.interest_id = i.interest_id
+         WHERE ui.user_id = ?`,
+        [user_id]
+      );
+  
+      let sessions;
+      const baseUrl = "https://evidently-handy-troll.ngrok-free.app";
+  
+      if (!Array.isArray(interestRows) || interestRows.length === 0) {
+        // If student has no interests, return all available sessions
+        const [allSessionRows] = await connection.execute(
+          `SELECT 
+            s.session_id AS sessionId,
+            s.mentor_id AS mentorId,
+            u.name AS mentorName,
+            m.image_url AS mentorImage,
+            s.type,
+            s.session_title AS title,
+            s.duration_mins AS DurationInMinutes,
+            s.is_online,
+            s.is_offline,
+            s.description
+          FROM Sessions s
+          JOIN Mentors m ON s.mentor_id = m.mentor_id
+          JOIN Users u ON m.user_id = u.user_id`
+        );
+  
+        sessions = (allSessionRows as any[]).map((row) => {
+          const session_medium: ("online" | "offline")[] = [];
+          if (row.is_online) session_medium.push("online");
+          if (row.is_offline) session_medium.push("offline");
+  
+          const mentorImageLink = row.mentorImage
+            ? `${baseUrl}/api/mentor/image/${row.mentorId}`
+            : "";
+  
+          return {
+            sessionId: row.sessionId,
+            mentorId: row.mentorId,
+            mentorName: row.mentorName,
+            mentorImageLink,
+            type: row.type,
+            title: row.title,
+            DurationInMinutes: row.DurationInMinutes,
+            session_medium,
+            Description: row.description,
+          } as SessionInfo;
+        });
+      } else {
+        // If student has interests, exclude sessions from mentors with matching interests
+        const interestIds = (interestRows as { interest_id: string }[]).map(row => row.interest_id);
+  
+        const [nonInterestSessionRows] = await connection.execute(
+          `SELECT 
+            s.session_id AS sessionId,
+            s.mentor_id AS mentorId,
+            u.name AS mentorName,
+            m.image_url AS mentorImage,
+            s.type,
+            s.session_title AS title,
+            s.duration_mins AS DurationInMinutes,
+            s.is_online,
+            s.is_offline,
+            s.description
+          FROM Sessions s
+          JOIN Mentors m ON s.mentor_id = m.mentor_id
+          JOIN Users u ON m.user_id = u.user_id
+          WHERE s.mentor_id NOT IN (
+            SELECT DISTINCT m2.mentor_id
+            FROM Mentors m2
+            JOIN User_Interests ui ON m2.user_id = ui.user_id
+            WHERE ui.interest_id IN (${interestIds.map(() => '?').join(',')})
+          )
+          ORDER BY s.created_at ASC`,
+          [...interestIds]
+        );
+  
+        sessions = (nonInterestSessionRows as any[]).map((row) => {
+          const session_medium: ("online" | "offline")[] = [];
+          if (row.is_online) session_medium.push("online");
+          if (row.is_offline) session_medium.push("offline");
+  
+          const mentorImageLink = row.mentorImage
+            ? `${baseUrl}/api/mentor/image/${row.mentorId}`
+            : "";
+  
+          return {
+            sessionId: row.sessionId,
+            mentorId: row.mentorId,
+            mentorName: row.mentorName,
+            mentorImageLink,
+            type: row.type,
+            title: row.title,
+            DurationInMinutes: row.DurationInMinutes,
+            session_medium,
+            Description: row.description,
+          } as SessionInfo;
+        });
+      }
+  
+      res.status(200).json({
+        success: true,
+        data: sessions,
+      });
+    } catch (error) {
+      console.error("Get non-interest-based sessions error:", error);
+      res.status(500).json({ message: "Server error" });
+    } finally {
+      connection.release();
+    }
+  }
 }

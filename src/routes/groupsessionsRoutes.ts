@@ -5,7 +5,7 @@ import {
   requireStudent,
   requireMentorOrStudent,
 } from "../middleware/auth";
-import GroupSessionController from "../controllers/mentor/groupSessionCreate";
+import GroupSessionController from "../controllers/mentor/groupSessionController";
 // import { groupSessionParticipantController } from "../controllers/student/groupSessionParticipantController";
 
 const router = Router();
@@ -42,7 +42,7 @@ router.get(
 //   groupSessionParticipantController.cancelRegistration
 // );
 
-// D.5 Get Participant List
+// D.5 Get Registered Participant List
 // router.get(
 //   "/participantlist/:gsid",
 //   authenticateToken,

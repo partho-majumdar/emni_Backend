@@ -50,19 +50,19 @@ router.post(
 // );
 
 // A.6 Get Sessions for Student (interest-based)
-// router.get(
-//   "/student/interest",
-//   authenticateToken as express.RequestHandler,
-//   requireStudent as express.RequestHandler,
-//   oneOnOneSessionController.getInterestBasedSessions as express.RequestHandler
-// );
+router.get(
+  "/student/interest",
+  authenticateToken as express.RequestHandler,
+  requireStudent as express.RequestHandler,
+  oneOnOneSessionController.getInterestBasedSessionsForStudent as express.RequestHandler
+);
 
 // A.7 Get Sessions for Student (others)
-// router.get(
-//   "/student/others",
-//   authenticateToken as express.RequestHandler,
-//   requireStudent as express.RequestHandler,
-//   oneOnOneSessionController.getOtherSessions as express.RequestHandler
-// );
+router.get(
+  "/student/others",
+  authenticateToken as express.RequestHandler,
+  requireStudent as express.RequestHandler,
+  oneOnOneSessionController.getNonInterestBasedSessionsForStudent as express.RequestHandler
+);
 
 export default router;

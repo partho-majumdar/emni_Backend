@@ -245,7 +245,6 @@ class GroupSessionController {
         [mentorId]
       );
 
-      // Construct the base URL for photoLink
       const baseUrl = "https://evidently-handy-troll.ngrok-free.app";
       const photoLink = `${baseUrl}/api/mentor/image/${mentorId}`;
 
@@ -255,7 +254,7 @@ class GroupSessionController {
         title: row.title,
         description: row.description,
         durationInMinutes: row.durationInMinutes,
-        startTime: new Date(row.startTime).toISOString(), // Convert to ISO string
+        startTime: new Date(row.startTime).toISOString(),
         mentor: {
           id: mentor.mentor_id,
           name: mentor.name,
@@ -377,7 +376,6 @@ class GroupSessionController {
         [groupSessionId]
       );
 
-      // Construct the base URL for photoLink
       const baseUrl = "https://evidently-handy-troll.ngrok-free.app";
       const photoLink = `${baseUrl}/api/mentor/image/${authenticatedMentorId}`;
 
@@ -446,7 +444,6 @@ class GroupSessionController {
         ORDER BY gs.session_date ASC` // Order by upcoming sessions first
       );
 
-      // Construct the base URL for photo links
       const baseUrl = "https://evidently-handy-troll.ngrok-free.app";
 
       // Map database rows to GroupSession type
