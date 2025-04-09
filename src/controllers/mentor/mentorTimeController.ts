@@ -7,8 +7,8 @@ interface AuthenticatedRequest extends Request {
 }
 
 interface AvailabilityInput {
-  startTime: string; // ISO string, e.g., "2025-03-25T09:43:44.000Z"
-  endTime: string; // ISO string, e.g., "2025-03-25T11:15:44.000Z"
+  startTime: string;
+  endTime: string;
   medium: ("online" | "offline")[];
 }
 
@@ -24,8 +24,8 @@ function parseIsoToDateTime(isoString: string): { date: string; time: string } {
   if (isNaN(dateObj.getTime())) {
     throw new Error(`Invalid ISO date string: ${isoString}`);
   }
-  const date = dateObj.toISOString().split("T")[0]; // e.g., "2025-03-25"
-  const time = dateObj.toISOString().split("T")[1].substring(0, 8); // e.g., "09:43:44"
+  const date = dateObj.toISOString().split("T")[0];
+  const time = dateObj.toISOString().split("T")[1].substring(0, 8);
   return { date, time };
 }
 

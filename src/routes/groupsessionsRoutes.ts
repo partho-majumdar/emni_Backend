@@ -11,19 +11,19 @@ import GroupSessionController from "../controllers/mentor/groupSessionCreate";
 const router = Router();
 
 // D.1 Get List of Group Sessions
-// router.get(
-//   "/",
-//   authenticateToken,
-//   requireMentorOrStudent,
-//   GroupSessionController.getAllGroupSessions
-// );
+router.get(
+  "/",
+  authenticateToken as express.RequestHandler,
+  requireMentorOrStudent as express.RequestHandler,
+  GroupSessionController.getAllGroupSessions as express.RequestHandler
+);
 
 // D.2 Get Specific Group Session
 // router.get(
 //   "/:gsid",
-//   authenticateToken,
-//   requireMentorOrStudent,
-//   GroupSessionController.getGroupSessionById
+//   authenticateToken as express.RequestHandler,
+//   requireMentorOrStudent as express.RequestHandler,
+//   GroupSessionController.getGroupSessionById as express.RequestHandler,
 // );
 
 // D.3 Student Joins Group Session
