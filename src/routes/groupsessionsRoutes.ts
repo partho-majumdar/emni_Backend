@@ -19,12 +19,12 @@ router.get(
 );
 
 // D.2 Get Specific Group Session
-// router.get(
-//   "/:gsid",
-//   authenticateToken as express.RequestHandler,
-//   requireMentorOrStudent as express.RequestHandler,
-//   GroupSessionController.getGroupSessionById as express.RequestHandler,
-// );
+router.get(
+  "/:gsid",
+  authenticateToken as express.RequestHandler,
+  requireMentorOrStudent as express.RequestHandler,
+  GroupSessionController.getGroupSessionById as express.RequestHandler
+);
 
 // D.3 Student Joins Group Session
 // router.post(

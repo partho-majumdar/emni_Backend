@@ -483,6 +483,90 @@ class GroupSessionController {
       });
     }
   }
+
+  static async getGroupSessionById(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const groupSessionId = req.params.gsid;
+
+      if (!groupSessionId) {
+        res.status(400).json({
+          success: false,
+          error: "Group session ID is required in URL path",
+        });
+        return;
+      }
+
+      // Fetch the specific group session with mentor details and participant count
+      const [sessionRows]: any[] = await pool.query(
+        `SELECT 
+          gs.group_session_id AS id,
+          gs.title,
+          gs.description,
+          gs.duration_mins AS durationInMinutes,
+          gs.session_date AS startTime,
+          gs.max_participants AS maxParticipants,
+          COUNT(gsp.student_id) AS currentParticipants,
+          m.mentor_id,
+          u.name AS mentor_name,
+          m.image_url
+        FROM Group_Sessions gs
+        JOIN Mentors m ON gs.mentor_id = m.mentor_id
+        JOIN Users u ON m.user_id = u.user_id
+        LEFT JOIN Group_Session_Participants gsp ON gs.group_session_id = gsp.group_session_id
+        WHERE gs.group_session_id = ?
+        GROUP BY 
+          gs.group_session_id, gs.title, gs.description, 
+          gs.duration_mins, gs.session_date, gs.max_participants,
+          m.mentor_id, u.name, m.image_url`,
+        [groupSessionId]
+      );
+
+      if (!sessionRows || sessionRows.length === 0) {
+        res.status(404).json({
+          success: false,
+          error: "Group session not found",
+          details: `No group session exists with ID: ${groupSessionId}`,
+        });
+        return;
+      }
+
+      const session = sessionRows[0];
+      const baseUrl = "https://evidently-handy-troll.ngrok-free.app";
+
+      const response: GroupSessionResponse = {
+        success: true,
+        data: {
+          id: session.id,
+          title: session.title,
+          description: session.description,
+          durationInMinutes: session.durationInMinutes,
+          startTime: new Date(session.startTime).toISOString(),
+          mentor: {
+            id: session.mentor_id,
+            name: session.mentor_name,
+            photoLink: `${baseUrl}/api/mentor/image/${session.mentor_id}`,
+          },
+          participants: {
+            current: parseInt(session.currentParticipants, 10),
+            max: session.maxParticipants,
+          },
+        },
+      };
+
+      res.status(200).json(response);
+    } catch (error: any) {
+      console.error("Error fetching group session by ID:", error);
+      res.status(500).json({
+        success: false,
+        error: "Internal server error",
+        details: error.message,
+      });
+    }
+  }
 }
 
 export default GroupSessionController;
