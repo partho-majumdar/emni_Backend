@@ -126,11 +126,7 @@ import {
   requireMentor,
   requireAnyAuthenticated,
 } from "../middleware/auth";
-import {
-  getMentorInterests,
-  addMentorInterests,
-  updateMentorInterests,
-} from "../controllers/mentor/interestController";
+import { MentorInterestController } from "../controllers/mentor/interestController";
 import { MentorAvailabilityController } from "../controllers/mentor/mentorTimeController";
 import { auth } from "google-auth-library";
 // import { mentorSessionController } from "../controllers/mentor/mentorSessionController";
@@ -179,21 +175,24 @@ router
 // );
 
 // Interest Routes
-router.get(
-  "/interests/list",
-  authenticateToken as express.RequestHandler,
-  getMentorInterests as express.RequestHandler
-);
-router.post(
-  "/interests/add",
-  authenticateToken as express.RequestHandler,
-  addMentorInterests as express.RequestHandler
-);
-router.put(
-  "/interests/update",
-  authenticateToken as express.RequestHandler,
-  updateMentorInterests as express.RequestHandler
-);
+router
+  .put(
+    "/interests/list",
+    authenticateToken as express.RequestHandler,
+    requireMentor as express.RequestHandler,
+    MentorInterestController.updateMentorInterests as express.RequestHandler
+  )
+  .get(
+    "/interests/list",
+    authenticateToken as express.RequestHandler,
+    requireMentor as express.RequestHandler,
+    MentorInterestController.getMentorInterests as express.RequestHandler
+  );
+// router.put(
+//   "/interests/update",
+//   authenticateToken as express.RequestHandler,
+//   updateMentorInterests as express.RequestHandler
+// );
 
 // C.1 Add Availability
 router.post(
