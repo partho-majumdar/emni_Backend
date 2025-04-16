@@ -7,9 +7,10 @@ import {
 } from "../middleware/auth";
 
 import {
-  getStudentInterests,
-  addStudentInterests,
-  updateStudentInterests,
+  // getStudentInterests,
+  // addStudentInterests,
+  // updateStudentInterests,
+  StudentInterestController,
 } from "../controllers/student/interestController";
 import { getSuggestedMentors } from "../controllers/student/mentorSuggestionController";
 import MentorAvailabilityController from "../controllers/student/studentSeeMentorFreeTime";
@@ -61,23 +62,31 @@ router
 // );
 
 // Interest-related routes
-router.get(
-  "/interests/list",
-  authenticateToken as express.RequestHandler,
-  getStudentInterests as express.RequestHandler
-);
+router
+  .put(
+    "/interests/list",
+    authenticateToken as express.RequestHandler,
+    requireStudent as express.RequestHandler,
+    StudentInterestController.updateStudentInterests as express.RequestHandler
+  )
+  .get(
+    "/interests/list",
+    authenticateToken as express.RequestHandler,
+    requireStudent as express.RequestHandler,
+    StudentInterestController.getStudentInterests as express.RequestHandler
+  );
 
-router.post(
-  "/interests/add",
-  authenticateToken as express.RequestHandler,
-  addStudentInterests as express.RequestHandler
-);
+// router.post(
+//   "/interests/add",
+//   authenticateToken as express.RequestHandler,
+//   addStudentInterests as express.RequestHandler
+// );
 
-router.put(
-  "/interests/update",
-  authenticateToken as express.RequestHandler,
-  updateStudentInterests as express.RequestHandler
-);
+// router.put(
+//   "/interests/update",
+//   authenticateToken as express.RequestHandler,
+//   updateStudentInterests as express.RequestHandler
+// );
 
 router.get(
   "/mavaliableat/:mentorId",
