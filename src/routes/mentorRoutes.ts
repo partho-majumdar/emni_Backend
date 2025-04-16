@@ -132,35 +132,51 @@ import {
   updateMentorInterests,
 } from "../controllers/mentor/interestController";
 import { MentorAvailabilityController } from "../controllers/mentor/mentorTimeController";
+import { auth } from "google-auth-library";
 // import { mentorSessionController } from "../controllers/mentor/mentorSessionController";
 
 const router = Router();
 
 // Mentor Auth Routes
-router.get(
-  "/image/:mentor_id",
-  MentorAuthController.getMentorImage as express.RequestHandler
-);
-router.get(
-  "/all",
-  MentorAuthController.getAllMentors as express.RequestHandler
-);
-router.post(
-  "/register",
-  MentorAuthController.register as express.RequestHandler
-);
-router.post("/login", MentorAuthController.login as express.RequestHandler);
-router.get(
-  "/:mentor_id",
-  authenticateToken as express.RequestHandler,
-  requireAnyAuthenticated as express.RequestHandler,
-  MentorAuthController.getProfile as express.RequestHandler
-);
-router.put(
-  "/profile/edit",
-  authenticateToken as express.RequestHandler,
-  MentorAuthController.updateProfile as express.RequestHandler
-);
+// router.get(
+//   "/image/:mentor_id",
+//   MentorAuthController.getMentorImage as express.RequestHandler
+// );
+// router.get(
+//   "/all",
+//   MentorAuthController.getAllMentors as express.RequestHandler
+// );
+router
+  .post("/register", MentorAuthController.register as express.RequestHandler)
+  .post("/login", MentorAuthController.login as express.RequestHandler)
+  .get(
+    "/image/:mentor_id",
+    MentorAuthController.getMentorImage as express.RequestHandler
+  )
+  .get(
+    "/myself",
+    authenticateToken as express.RequestHandler,
+    requireMentor as express.RequestHandler,
+    MentorAuthController.getMentorMyselfProfile as express.RequestHandler
+  )
+  .put(
+    "/myself",
+    authenticateToken as express.RequestHandler,
+    requireMentor as express.RequestHandler,
+    MentorAuthController.updateMentorProfile as express.RequestHandler
+  );
+
+// router.get(
+//   "/:mentor_id",
+//   authenticateToken as express.RequestHandler,
+//   requireAnyAuthenticated as express.RequestHandler,
+//   MentorAuthController.getProfile as express.RequestHandler
+// );
+// router.put(
+//   "/profile/edit",
+//   authenticateToken as express.RequestHandler,
+//   MentorAuthController.updateProfile as express.RequestHandler
+// );
 
 // Interest Routes
 router.get(
