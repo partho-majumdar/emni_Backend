@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import pool from "../../config/database"; // Assuming this is your MySQL connection pool
 import { v4 as uuidv4 } from "uuid";
+import { platform } from "os";
 
 // Request body interface for create (unchanged)
 interface GroupSessionRequest {
@@ -28,6 +29,7 @@ interface GroupSession {
     current: number;
     max: number;
   };
+  platform_link: string;
 }
 
 // Response interface for create (unchanged)
@@ -111,7 +113,7 @@ class GroupSessionController {
       }
 
       const [mentorRows]: any[] = await pool.query(
-        `SELECT m.mentor_id, u.name, m.image_url
+        `SELECT m.mentor_id, u.name, u.image_url
          FROM Mentors m
          JOIN Users u ON m.user_id = u.user_id
          WHERE m.user_id = ?`,
@@ -168,6 +170,7 @@ class GroupSessionController {
             current: 0,
             max: maxParticipant,
           },
+          platform_link: platform_link,
         },
       };
 
@@ -210,7 +213,7 @@ class GroupSessionController {
 
       // Verify mentor exists and fetch mentor details
       const [mentorRows]: any[] = await pool.query(
-        `SELECT m.mentor_id, u.name, m.image_url
+        `SELECT m.mentor_id, u.name, u.image_url
          FROM Mentors m
          JOIN Users u ON m.user_id = u.user_id
          WHERE m.mentor_id = ?`,
@@ -237,6 +240,7 @@ class GroupSessionController {
           gs.duration_mins AS durationInMinutes,
           gs.session_date AS startTime,
           gs.max_participants AS maxParticipants,
+          gs.platform AS platform_link,
           COUNT(gsp.student_id) AS currentParticipants
         FROM Group_Sessions gs
         LEFT JOIN Group_Session_Participants gsp ON gs.group_session_id = gsp.group_session_id
@@ -264,6 +268,7 @@ class GroupSessionController {
           current: parseInt(row.currentParticipants, 10),
           max: row.maxParticipants,
         },
+        platform_link: row.platform_link,
       }));
 
       // Construct response
@@ -312,7 +317,7 @@ class GroupSessionController {
 
       // Fetch authenticated mentor details
       const [mentorRows]: any[] = await pool.query(
-        `SELECT m.mentor_id, u.name, m.image_url
+        `SELECT m.mentor_id, u.name, u.image_url
          FROM Mentors m
          JOIN Users u ON m.user_id = u.user_id
          WHERE m.user_id = ?`,
@@ -395,6 +400,7 @@ class GroupSessionController {
           current: parseInt(session.currentParticipants, 10),
           max: session.maxParticipants,
         },
+        platform_link: session.platform_link,
       };
 
       // Construct response
@@ -432,7 +438,8 @@ class GroupSessionController {
           COUNT(gsp.student_id) AS currentParticipants,
           m.mentor_id,
           u.name AS mentor_name,
-          m.image_url
+          u.image_url,
+          gs.platform AS platform_link
         FROM Group_Sessions gs
         JOIN Mentors m ON gs.mentor_id = m.mentor_id
         JOIN Users u ON m.user_id = u.user_id
@@ -440,7 +447,7 @@ class GroupSessionController {
         GROUP BY 
           gs.group_session_id, gs.title, gs.description, 
           gs.duration_mins, gs.session_date, gs.max_participants,
-          m.mentor_id, u.name, m.image_url
+          m.mentor_id, u.name, u.image_url
         ORDER BY gs.session_date ASC` // Order by upcoming sessions first
       );
 
@@ -462,6 +469,7 @@ class GroupSessionController {
           current: parseInt(row.currentParticipants, 10),
           max: row.maxParticipants,
         },
+        platform_link: row.platform_link,
       }));
 
       // Construct response
@@ -509,7 +517,8 @@ class GroupSessionController {
           COUNT(gsp.student_id) AS currentParticipants,
           m.mentor_id,
           u.name AS mentor_name,
-          m.image_url
+          u.image_url,
+          gs.platform AS platform_link
         FROM Group_Sessions gs
         JOIN Mentors m ON gs.mentor_id = m.mentor_id
         JOIN Users u ON m.user_id = u.user_id
@@ -518,7 +527,7 @@ class GroupSessionController {
         GROUP BY 
           gs.group_session_id, gs.title, gs.description, 
           gs.duration_mins, gs.session_date, gs.max_participants,
-          m.mentor_id, u.name, m.image_url`,
+          m.mentor_id, u.name, u.image_url`,
         [groupSessionId]
       );
 
@@ -551,6 +560,7 @@ class GroupSessionController {
             current: parseInt(session.currentParticipants, 10),
             max: session.maxParticipants,
           },
+          platform_link: session.platform_link,
         },
       };
 
