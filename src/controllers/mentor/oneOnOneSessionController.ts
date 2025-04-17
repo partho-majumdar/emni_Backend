@@ -6,7 +6,6 @@ interface AuthenticatedRequest extends Request {
   user?: { user_id: string; user_type: string; email?: string };
 }
 
-// Request body interface for creating a new session
 interface SessionInput {
   title: string;
   DurationInMinutes: number;
@@ -25,12 +24,11 @@ interface SessionInput {
     | "Mock Interview";
 }
 
-// Response data interface for the newly created session
 interface SessionInfo {
   sessionId: string;
   mentorId: string;
   mentorName: string;
-  mentorImageLink: string; // URL string following the pattern /api/mentor/image/:mentorId
+  mentorImageLink: string;
   type:
     | "Course Topic Tuition"
     | "Project Help"
@@ -66,7 +64,6 @@ interface UpdateSessionInput {
 }
 
 export class oneOnOneSessionController {
-  // POST /api/sessions/new
   static async createSession(req: AuthenticatedRequest, res: Response) {
     const user_id = req.user?.user_id;
     const {
@@ -78,12 +75,10 @@ export class oneOnOneSessionController {
       type,
     } = req.body as SessionInput;
 
-    // Authentication check
     if (!user_id) {
       return res.status(401).json({ message: "Unauthorized: No user ID" });
     }
 
-    // Validation of required fields
     if (
       !title ||
       !DurationInMinutes ||
@@ -91,7 +86,7 @@ export class oneOnOneSessionController {
       !Array.isArray(session_medium) ||
       session_medium.length === 0 ||
       !Description ||
-      Price === undefined || // Price can be 0, so check for undefined
+      Price === undefined ||
       !type
     ) {
       return res
@@ -121,7 +116,6 @@ export class oneOnOneSessionController {
     try {
       await connection.beginTransaction();
 
-      // Check if user is a mentor and fetch mentor_id
       const [mentorRows] = await connection.execute(
         "SELECT mentor_id FROM Mentors WHERE user_id = ?",
         [user_id]
@@ -135,9 +129,8 @@ export class oneOnOneSessionController {
       }
       const mentor_id = mentor.mentor_id;
 
-      // Fetch mentor details (name from Users, image_url from Mentors)
       const [mentorDetailsRows] = await connection.execute(
-        `SELECT u.name, m.image_url
+        `SELECT u.name, u.image_url
          FROM Mentors m
          JOIN Users u ON m.user_id = u.user_id
          WHERE m.mentor_id = ?`,
@@ -149,7 +142,6 @@ export class oneOnOneSessionController {
         return res.status(500).json({ message: "Mentor details not found" });
       }
 
-      // Insert new session
       const session_id = uuidv4();
       const INSERT_SESSION = `
         INSERT INTO Sessions (
@@ -171,13 +163,11 @@ export class oneOnOneSessionController {
 
       await connection.commit();
 
-      // Construct the mentorImageLink using the same base URL pattern as getGroupSessionsByMentorId
       const baseUrl = "https://evidently-handy-troll.ngrok-free.app";
       const mentorImageLink = mentorDetails.image_url
         ? `${baseUrl}/api/mentor/image/${mentor_id}`
         : "";
 
-      // Prepare response
       const sessionInfo: SessionInfo = {
         sessionId: session_id,
         mentorId: mentor_id,
@@ -186,7 +176,7 @@ export class oneOnOneSessionController {
         type: type,
         title: title,
         DurationInMinutes: DurationInMinutes,
-        session_medium: session_medium, // Return original array from request
+        session_medium: session_medium,
         Description: Description,
       };
 
@@ -402,7 +392,6 @@ export class oneOnOneSessionController {
   ) {
     const user_id = req.user?.user_id;
 
-    // Authentication check using token from header
     if (!user_id) {
       return res
         .status(401)
@@ -411,7 +400,6 @@ export class oneOnOneSessionController {
 
     const connection = await pool.getConnection();
     try {
-      // Fetch mentor_id from Mentors table using authenticated user_id
       const [mentorRows] = await connection.execute(
         "SELECT mentor_id FROM Mentors WHERE user_id = ?",
         [user_id]
@@ -422,13 +410,12 @@ export class oneOnOneSessionController {
       }
       const mentorId = mentor.mentor_id;
 
-      // Fetch all sessions for this mentor along with mentor details
       const [sessionRows] = await connection.execute(
         `SELECT 
           s.session_id,
           s.mentor_id,
           u.name AS mentor_name,
-          m.image_url,
+          u.image_url,
           s.type,
           s.session_title AS title,
           s.duration_mins,
@@ -498,7 +485,7 @@ export class oneOnOneSessionController {
           s.session_id,
           s.mentor_id,
           u.name AS mentor_name,
-          m.image_url,
+          u.image_url,
           s.type,
           s.session_title AS title,
           s.duration_mins,
@@ -576,7 +563,6 @@ export class oneOnOneSessionController {
           .json({ message: "User is not a registered student" });
       }
 
-      // Get the student's interests
       const [interestRows] = await connection.execute(
         `SELECT i.interest_id
          FROM User_Interests ui
@@ -598,13 +584,12 @@ export class oneOnOneSessionController {
         (row) => row.interest_id
       );
 
-      // Get one-on-one sessions from mentors who share at least one interest
       const [sessionRows] = await connection.execute(
         `SELECT DISTINCT
           s.session_id AS sessionId,
           s.mentor_id AS mentorId,
           u.name AS mentorName,
-          m.image_url AS mentorImage,
+          u.image_url AS mentorImage,
           s.type,
           s.session_title AS title,
           s.duration_mins AS DurationInMinutes,
@@ -655,26 +640,31 @@ export class oneOnOneSessionController {
     }
   }
 
-  static async getNonInterestBasedSessionsForStudent(req: AuthenticatedRequest, res: Response) {
+  static async getNonInterestBasedSessionsForStudent(
+    req: AuthenticatedRequest,
+    res: Response
+  ) {
     const user_id = req.user?.user_id;
     const connection = await pool.getConnection();
-    
+
     try {
       if (!user_id) {
-        return res.status(401).json({ message: "Unauthorized: No valid authentication token" });
+        return res
+          .status(401)
+          .json({ message: "Unauthorized: No valid authentication token" });
       }
-  
-      // Verify the user is a student
+
       const [studentRows] = await connection.execute(
         "SELECT student_id FROM Students WHERE user_id = ?",
         [user_id]
       );
-      
+
       if (!Array.isArray(studentRows) || studentRows.length === 0) {
-        return res.status(403).json({ message: "User is not a registered student" });
+        return res
+          .status(403)
+          .json({ message: "User is not a registered student" });
       }
-  
-      // Get the student's interests
+
       const [interestRows] = await connection.execute(
         `SELECT i.interest_id
          FROM User_Interests ui
@@ -682,18 +672,17 @@ export class oneOnOneSessionController {
          WHERE ui.user_id = ?`,
         [user_id]
       );
-  
+
       let sessions;
       const baseUrl = "https://evidently-handy-troll.ngrok-free.app";
-  
+
       if (!Array.isArray(interestRows) || interestRows.length === 0) {
-        // If student has no interests, return all available sessions
         const [allSessionRows] = await connection.execute(
           `SELECT 
             s.session_id AS sessionId,
             s.mentor_id AS mentorId,
             u.name AS mentorName,
-            m.image_url AS mentorImage,
+            u.image_url AS mentorImage,
             s.type,
             s.session_title AS title,
             s.duration_mins AS DurationInMinutes,
@@ -704,16 +693,16 @@ export class oneOnOneSessionController {
           JOIN Mentors m ON s.mentor_id = m.mentor_id
           JOIN Users u ON m.user_id = u.user_id`
         );
-  
+
         sessions = (allSessionRows as any[]).map((row) => {
           const session_medium: ("online" | "offline")[] = [];
           if (row.is_online) session_medium.push("online");
           if (row.is_offline) session_medium.push("offline");
-  
+
           const mentorImageLink = row.mentorImage
             ? `${baseUrl}/api/mentor/image/${row.mentorId}`
             : "";
-  
+
           return {
             sessionId: row.sessionId,
             mentorId: row.mentorId,
@@ -727,15 +716,16 @@ export class oneOnOneSessionController {
           } as SessionInfo;
         });
       } else {
-        // If student has interests, exclude sessions from mentors with matching interests
-        const interestIds = (interestRows as { interest_id: string }[]).map(row => row.interest_id);
-  
+        const interestIds = (interestRows as { interest_id: string }[]).map(
+          (row) => row.interest_id
+        );
+
         const [nonInterestSessionRows] = await connection.execute(
           `SELECT 
             s.session_id AS sessionId,
             s.mentor_id AS mentorId,
             u.name AS mentorName,
-            m.image_url AS mentorImage,
+            u.image_url AS mentorImage,
             s.type,
             s.session_title AS title,
             s.duration_mins AS DurationInMinutes,
@@ -749,21 +739,21 @@ export class oneOnOneSessionController {
             SELECT DISTINCT m2.mentor_id
             FROM Mentors m2
             JOIN User_Interests ui ON m2.user_id = ui.user_id
-            WHERE ui.interest_id IN (${interestIds.map(() => '?').join(',')})
+            WHERE ui.interest_id IN (${interestIds.map(() => "?").join(",")})
           )
           ORDER BY s.created_at ASC`,
           [...interestIds]
         );
-  
+
         sessions = (nonInterestSessionRows as any[]).map((row) => {
           const session_medium: ("online" | "offline")[] = [];
           if (row.is_online) session_medium.push("online");
           if (row.is_offline) session_medium.push("offline");
-  
+
           const mentorImageLink = row.mentorImage
             ? `${baseUrl}/api/mentor/image/${row.mentorId}`
             : "";
-  
+
           return {
             sessionId: row.sessionId,
             mentorId: row.mentorId,
@@ -777,7 +767,7 @@ export class oneOnOneSessionController {
           } as SessionInfo;
         });
       }
-  
+
       res.status(200).json({
         success: true,
         data: sessions,
