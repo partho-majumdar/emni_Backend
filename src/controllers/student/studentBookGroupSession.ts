@@ -17,6 +17,21 @@ interface BookGroupSessionResponse {
   };
 }
 
+// Interface for participant info
+interface GroupSessionParticipantInfo {
+  id: string;
+  name: string;
+  photoLink: string | null;
+  joinedAt: string;
+  status: "registered" | "cancelled" | "completed" | "waiting";
+}
+
+// Interface for participant list response
+interface ParticipantListResponse {
+  success: boolean;
+  data: GroupSessionParticipantInfo[];
+}
+
 // Define JwtPayload for JWT authentication
 interface JwtPayload {
   user_id: string;
@@ -33,6 +48,15 @@ export class BookGroupSessionController {
     const userId = req.user?.user_id;
     const { GroupSessionId, ParticipantId } =
       req.body as BookGroupSessionRequest;
+
+    console.log(
+      "POST /api/groupsessions/join - userId:",
+      userId,
+      "groupSessionId:",
+      GroupSessionId,
+      "participantId:",
+      ParticipantId
+    );
 
     if (!userId) {
       console.log("Unauthorized: No user ID in JWT token");
@@ -154,6 +178,96 @@ export class BookGroupSessionController {
           message: "Student is already a participant in this group session",
         });
       }
+      res.status(500).json({
+        success: false,
+        message: "Server error",
+        error: error.message,
+      });
+    }
+  }
+
+  static async getRegisteredParticipantList(
+    req: AuthenticatedRequest,
+    res: Response
+  ) {
+    const groupSessionId = req.params.gsid;
+    const userId = req.user?.user_id;
+
+    console.log(
+      `GET /api/groupsessions/participantlist/${groupSessionId} - userId:`,
+      userId
+    );
+
+    if (!userId) {
+      console.log("Unauthorized: No user ID in JWT token");
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    if (!groupSessionId) {
+      console.log("Invalid input: GroupSessionId missing");
+      return res
+        .status(400)
+        .json({ success: false, message: "Group Session ID is required" });
+    }
+
+    try {
+      // Verify group session exists
+      const [sessionRows] = await pool.query<RowDataPacket[]>(
+        `
+        SELECT group_session_id, title
+        FROM Group_Sessions
+        WHERE group_session_id = ?
+        `,
+        [groupSessionId]
+      );
+      console.log("Group session check:", sessionRows);
+      if (sessionRows.length === 0) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Group session not found" });
+      }
+
+      // Fetch participants
+      const [participantRows] = await pool.query<RowDataPacket[]>(
+        `
+        SELECT 
+          s.student_id AS id,
+          u.name,
+          u.image_url,
+          gsp.joined_at AS joinedAt
+        FROM Group_Session_Participants gsp
+        JOIN Students s ON gsp.student_id = s.student_id
+        JOIN Users u ON s.user_id = u.user_id
+        WHERE gsp.group_session_id = ?
+        ORDER BY gsp.joined_at ASC
+        `,
+        [groupSessionId]
+      );
+      console.log("Participants fetched:", participantRows);
+
+      const baseUrl = "https://evidently-handy-troll.ngrok-free.app";
+
+      // Map to GroupSessionParticipantInfo
+      const participants: GroupSessionParticipantInfo[] = participantRows.map(
+        (row) => ({
+          id: row.id,
+          name: row.name,
+          photoLink: `${baseUrl}/api/student/image/${row.id}`,
+          joinedAt: new Date(row.joinedAt).toISOString(),
+          status: "registered",
+        })
+      );
+
+      // Construct response
+      const response: ParticipantListResponse = {
+        success: true,
+        data: participants,
+      };
+
+      console.log("Returning participant list:", response);
+      res.status(200).json(response);
+    } catch (error: any) {
+      console.error("Error fetching participant list:", error);
       res.status(500).json({
         success: false,
         message: "Server error",

@@ -43,12 +43,12 @@ router.post(
 // );
 
 // D.5 Get Registered Participant List
-// router.get(
-//   "/participantlist/:gsid",
-//   authenticateToken,
-//   requireMentorOrStudent,
-//   GroupSessionController.getParticipantList
-// );
+router.get(
+  "/participantlist/:gsid",
+  authenticateToken as express.RequestHandler,
+  requireMentorOrStudent as express.RequestHandler,
+  BookGroupSessionController.getRegisteredParticipantList as express.RequestHandler
+);
 
 // D.6 Create Group Session
 router.post(

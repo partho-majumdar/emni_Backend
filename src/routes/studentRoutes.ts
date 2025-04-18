@@ -46,8 +46,6 @@ router
   )
   .get(
     "/image/:student_id",
-    authenticateToken as express.RequestHandler,
-    requireStudent as express.RequestHandler,
     StudentAuthController.getStudentImage as express.RequestHandler
   );
 
