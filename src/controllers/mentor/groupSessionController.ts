@@ -193,7 +193,6 @@ class GroupSessionController {
     }
   }
 
-  // New method to get group sessions by mentor ID from URL parameter
   static async getGroupSessionsByMentorId(
     req: Request,
     res: Response,
@@ -241,16 +240,17 @@ class GroupSessionController {
           gs.session_date AS startTime,
           gs.max_participants AS maxParticipants,
           gs.platform AS platform_link,
-          COUNT(gsp.student_id) AS currentParticipants
+          (SELECT COUNT(*) FROM Group_Session_Participants gsp2 
+           WHERE gsp2.group_session_id = gs.group_session_id 
+           AND gsp2.status = 'registered') AS currentParticipants
         FROM Group_Sessions gs
         LEFT JOIN Group_Session_Participants gsp ON gs.group_session_id = gsp.group_session_id
         WHERE gs.mentor_id = ?
-        GROUP BY gs.group_session_id, gs.title, gs.description, gs.duration_mins, gs.session_date, gs.max_participants`,
+        GROUP BY gs.group_session_id, gs.title, gs.description, gs.duration_mins, gs.session_date, gs.max_participants, gs.platform`,
         [mentorId]
       );
 
       const baseUrl = "https://evidently-handy-troll.ngrok-free.app";
-      const photoLink = `${baseUrl}/api/mentor/image/${mentorId}`;
 
       // Map database rows to GroupSession type
       const groupSessions: GroupSession[] = sessionRows.map((row: any) => ({
@@ -262,7 +262,9 @@ class GroupSessionController {
         mentor: {
           id: mentor.mentor_id,
           name: mentor.name,
-          photoLink: photoLink,
+          photoLink: mentor.image_url
+            ? `${baseUrl}/api/mentor/image/${mentor.mentor_id}`
+            : "",
         },
         participants: {
           current: parseInt(row.currentParticipants, 10),
@@ -435,7 +437,9 @@ class GroupSessionController {
           gs.duration_mins AS durationInMinutes,
           gs.session_date AS startTime,
           gs.max_participants AS maxParticipants,
-          COUNT(gsp.student_id) AS currentParticipants,
+          (SELECT COUNT(*) FROM Group_Session_Participants gsp2 
+           WHERE gsp2.group_session_id = gs.group_session_id 
+           AND gsp2.status = 'registered') AS currentParticipants,
           m.mentor_id,
           u.name AS mentor_name,
           u.image_url,
@@ -447,8 +451,8 @@ class GroupSessionController {
         GROUP BY 
           gs.group_session_id, gs.title, gs.description, 
           gs.duration_mins, gs.session_date, gs.max_participants,
-          m.mentor_id, u.name, u.image_url
-        ORDER BY gs.session_date ASC` // Order by upcoming sessions first
+          m.mentor_id, u.name, u.image_url, gs.platform
+        ORDER BY gs.session_date ASC`
       );
 
       const baseUrl = "https://evidently-handy-troll.ngrok-free.app";
@@ -463,7 +467,9 @@ class GroupSessionController {
         mentor: {
           id: row.mentor_id,
           name: row.mentor_name,
-          photoLink: `${baseUrl}/api/mentor/image/${row.mentor_id}`,
+          photoLink: row.image_url
+            ? `${baseUrl}/api/mentor/image/${row.mentor_id}`
+            : "",
         },
         participants: {
           current: parseInt(row.currentParticipants, 10),
@@ -514,7 +520,9 @@ class GroupSessionController {
           gs.duration_mins AS durationInMinutes,
           gs.session_date AS startTime,
           gs.max_participants AS maxParticipants,
-          COUNT(gsp.student_id) AS currentParticipants,
+          (SELECT COUNT(*) FROM Group_Session_Participants gsp2 
+           WHERE gsp2.group_session_id = gs.group_session_id 
+           AND gsp2.status = 'registered') AS currentParticipants,
           m.mentor_id,
           u.name AS mentor_name,
           u.image_url,
@@ -527,7 +535,7 @@ class GroupSessionController {
         GROUP BY 
           gs.group_session_id, gs.title, gs.description, 
           gs.duration_mins, gs.session_date, gs.max_participants,
-          m.mentor_id, u.name, u.image_url`,
+          m.mentor_id, u.name, u.image_url, gs.platform`,
         [groupSessionId]
       );
 
@@ -554,7 +562,9 @@ class GroupSessionController {
           mentor: {
             id: session.mentor_id,
             name: session.mentor_name,
-            photoLink: `${baseUrl}/api/mentor/image/${session.mentor_id}`,
+            photoLink: session.image_url
+              ? `${baseUrl}/api/mentor/image/${session.mentor_id}`
+              : "",
           },
           participants: {
             current: parseInt(session.currentParticipants, 10),

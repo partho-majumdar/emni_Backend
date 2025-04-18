@@ -35,12 +35,12 @@ router.post(
 );
 
 // D.4 Cancel Registration
-// router.post(
-//   "/cancelregistration",
-//   authenticateToken,
-//   requireStudent,
-//   groupSessionParticipantController.cancelRegistration
-// );
+router.post(
+  "/cancelregistration",
+  authenticateToken as express.RequestHandler,
+  requireStudent as express.RequestHandler,
+  BookGroupSessionController.cancelRegistration as express.RequestHandler
+);
 
 // D.5 Get Registered Participant List
 router.get(
