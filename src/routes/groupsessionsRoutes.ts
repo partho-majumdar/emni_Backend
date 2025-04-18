@@ -6,7 +6,7 @@ import {
   requireMentorOrStudent,
 } from "../middleware/auth";
 import GroupSessionController from "../controllers/mentor/groupSessionController";
-// import { groupSessionParticipantController } from "../controllers/student/groupSessionParticipantController";
+import { BookGroupSessionController } from "../controllers/student/studentBookGroupSession";
 
 const router = Router();
 
@@ -27,12 +27,12 @@ router.get(
 );
 
 // D.3 Student Joins Group Session
-// router.post(
-//   "/join",
-//   authenticateToken,
-//   requireStudent,
-//   groupSessionParticipantController.joinGroupSession
-// );
+router.post(
+  "/join",
+  authenticateToken as express.RequestHandler,
+  requireStudent as express.RequestHandler,
+  BookGroupSessionController.bookGroupSession as express.RequestHandler
+);
 
 // D.4 Cancel Registration
 // router.post(
