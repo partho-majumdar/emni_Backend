@@ -96,12 +96,12 @@ export class MentorAvailabilityController {
       const [overlapRows] = await connection.execute(CHECK_OVERLAP, [
         mentor_id,
         available_date,
-        dbEndTime, // end_time > startTime
-        dbStartTime, // start_time < endTime
-        dbEndTime, // end_time > startTime
-        dbStartTime, // start_time < endTime
-        dbStartTime, // start_time >= startTime
-        dbEndTime, // end_time <= endTime
+        dbEndTime,
+        dbStartTime,
+        dbEndTime,
+        dbStartTime,
+        dbStartTime,
+        dbEndTime,
       ]);
       const overlapCount = (overlapRows as any[])[0].overlap_count;
       if (overlapCount > 0) {
@@ -128,7 +128,7 @@ export class MentorAvailabilityController {
         dbStartTime,
         dbEndTime,
         false,
-        null, // session_id starts as NULL
+        null,
       ]);
 
       await connection.commit();

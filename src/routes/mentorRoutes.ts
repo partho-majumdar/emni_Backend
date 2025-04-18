@@ -195,20 +195,19 @@ router
 // );
 
 // C.1 Add Availability
-router.post(
-  "/availability/add",
-  authenticateToken as express.RequestHandler,
-  requireMentor as express.RequestHandler,
-  MentorAvailabilityController.addAvailability as express.RequestHandler
-);
-
-// C.2 Get Availability List
-router.get(
-  "/availability/list",
-  authenticateToken as express.RequestHandler,
-  requireMentor as express.RequestHandler,
-  MentorAvailabilityController.getAvailabilities as express.RequestHandler
-);
+router
+  .post(
+    "/availability/add",
+    authenticateToken as express.RequestHandler,
+    requireMentor as express.RequestHandler,
+    MentorAvailabilityController.addAvailability as express.RequestHandler
+  )
+  .get(
+    "/availability/list",
+    authenticateToken as express.RequestHandler,
+    requireMentor as express.RequestHandler,
+    MentorAvailabilityController.getAvailabilities as express.RequestHandler
+  );
 
 // C.3 Get Closest Booked Session
 // router.get(

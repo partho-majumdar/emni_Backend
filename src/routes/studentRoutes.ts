@@ -14,6 +14,7 @@ import {
 } from "../controllers/student/interestController";
 import { getSuggestedMentors } from "../controllers/student/mentorSuggestionController";
 import MentorAvailabilityController from "../controllers/student/studentSeeMentorFreeTime";
+import { StudentSessionController } from "../controllers/student/studentBookOneOnOneSession";
 
 const router = Router();
 
@@ -76,21 +77,16 @@ router
     StudentInterestController.getStudentInterests as express.RequestHandler
   );
 
-// router.post(
-//   "/interests/add",
-//   authenticateToken as express.RequestHandler,
-//   addStudentInterests as express.RequestHandler
-// );
-
-// router.put(
-//   "/interests/update",
-//   authenticateToken as express.RequestHandler,
-//   updateStudentInterests as express.RequestHandler
-// );
-
 router.get(
   "/mavaliableat/:mentorId",
   MentorAvailabilityController.getMentorAvailability as express.RequestHandler
+);
+
+router.post(
+  "/payment/:sessionID",
+  authenticateToken as express.RequestHandler,
+  requireStudent as express.RequestHandler,
+  StudentSessionController.bookSession as express.RequestHandler
 );
 
 export default router;
