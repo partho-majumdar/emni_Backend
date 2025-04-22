@@ -712,17 +712,15 @@ export class StudentAuthController {
             .json({ message: "Unauthorized: No user data" });
         }
 
-        const { name, email, username, gender, grad_year, dob, password } =
+        const { name, email, username, gender, grad_year, dob, password, bio } =
           req.body;
         const file = req.file;
-
-        // Log req.body for debugging
-        console.log("Request body:", req.body);
 
         // Fetch current user and student data
         const FIND_CURRENT_PROFILE = `
           SELECT 
-            u.user_id, u.name, u.email, u.username, u.gender, u.dob, u.graduation_year, u.image_url, u.password_hash
+            u.user_id, u.name, u.email, u.username, u.gender, u.dob, u.graduation_year, u.image_url, u.password_hash,
+            s.bio
           FROM Users u
           JOIN Students s ON u.user_id = s.user_id
           WHERE u.user_id = ?
@@ -730,7 +728,7 @@ export class StudentAuthController {
         const [profileRows] = await connection.execute(FIND_CURRENT_PROFILE, [
           user.user_id,
         ]);
-        const currentProfile = (profileRows as User[])[0];
+        const currentProfile = (profileRows as any)[0];
         if (!currentProfile) {
           return res.status(404).json({ message: "Student profile not found" });
         }
@@ -761,7 +759,6 @@ export class StudentAuthController {
 
         await connection.beginTransaction();
 
-        // Prepare update values, retaining existing values for omitted fields
         const updateValues = {
           name: "name" in req.body && name !== "" ? name : currentProfile.name,
           email:
@@ -784,6 +781,7 @@ export class StudentAuthController {
             "password" in req.body && password
               ? await bcrypt.hash(password, 10)
               : currentProfile.password_hash,
+          bio: "bio" in req.body ? bio : currentProfile.bio,
         };
 
         // Update Users table
@@ -812,11 +810,20 @@ export class StudentAuthController {
           user.user_id,
         ]);
 
+        // Update Students table (bio)
+        const UPDATE_STUDENT = `
+          UPDATE Students
+          SET bio = ?
+          WHERE user_id = ?
+        `;
+        await connection.execute(UPDATE_STUDENT, [
+          updateValues.bio,
+          user.user_id,
+        ]);
+
         await connection.commit();
 
-        res.status(200).json({
-          success: true,
-        });
+        res.status(200).json({ success: true });
       } catch (error) {
         console.error("Update student profile error:", error);
         try {
@@ -840,7 +847,7 @@ export class StudentAuthController {
         return res.status(401).json({ message: "Unauthorized: No user data" });
       }
 
-      // Fetch user and student data
+      // Fetch user and student data with bio
       const FIND_PROFILE = `
         SELECT 
           u.user_id,
@@ -851,13 +858,14 @@ export class StudentAuthController {
           u.dob,
           u.graduation_year,
           u.image_url,
-          s.student_id
+          s.student_id,
+          s.bio
         FROM Users u
         JOIN Students s ON u.user_id = s.user_id
         WHERE u.user_id = ? AND u.user_type = 'Student'
       `;
       const [profileRows] = await pool.execute(FIND_PROFILE, [user.user_id]);
-      const profileData = (profileRows as (User & Student)[])[0];
+      const profileData = (profileRows as any)[0];
 
       if (!profileData) {
         return res.status(404).json({ message: "Student profile not found" });
@@ -869,8 +877,8 @@ export class StudentAuthController {
         ? `${baseUrl}/api/student/image/${profileData.student_id}`
         : "";
 
-      // Build response
-      const studentInfo: StudentInfoType = {
+      // Build response with bio
+      const studentInfo = {
         name: profileData.name || "",
         email: profileData.email || "",
         username: profileData.username || "",
@@ -880,6 +888,7 @@ export class StudentAuthController {
           : "",
         dob: profileData.dob || new Date(0),
         image_link,
+        bio: profileData.bio || "",
       };
 
       res.status(200).json({
