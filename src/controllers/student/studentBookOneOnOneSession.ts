@@ -30,18 +30,30 @@ export class StudentSessionController {
   static async bookSession(req: AuthenticatedRequest, res: Response) {
     const userId = req.user?.user_id;
     const sessionId = req.params.sessionID;
-    const { AvailabilityID } = req.body as BookSessionRequest;
+    const { AvailabilityID, medium } = req.body as {
+      AvailabilityID: string;
+      medium: "online" | "offline";
+    };
 
     if (!userId) {
       console.log("Unauthorized: No user ID in JWT token");
       return res.status(401).json({ success: false, message: "Unauthorized" });
     }
 
-    if (!sessionId || !AvailabilityID) {
-      console.log("Invalid input: sessionId or AvailabilityID missing");
+    if (!sessionId || !AvailabilityID || !medium) {
+      console.log(
+        "Invalid input: sessionId, AvailabilityID, or medium missing"
+      );
       return res.status(400).json({
         success: false,
-        message: "Session ID and Availability ID are required",
+        message: "Session ID, Availability ID, and medium are required",
+      });
+    }
+
+    if (medium !== "online" && medium !== "offline") {
+      return res.status(400).json({
+        success: false,
+        message: "Medium must be either 'online' or 'offline'",
       });
     }
 
@@ -62,7 +74,7 @@ export class StudentSessionController {
       }
       const student = studentRows[0];
 
-      // Step 2: Validate session and availability in Sessions and Mentor_Availability tables
+      // Step 2: Validate session and availability (FIXED: Added missing parenthesis)
       const [sessionRows] = await db.query<RowDataPacket[]>(
         `
         SELECT 
@@ -72,13 +84,22 @@ export class StudentSessionController {
           ma.start_time, 
           ma.end_time, 
           ma.available_date,
-          ma.mentor_id
+          ma.mentor_id,
+          ma.is_online,
+          ma.is_offline
         FROM Sessions s
         JOIN Mentor_Availability ma ON s.mentor_id = ma.mentor_id
-        WHERE s.session_id = ? AND ma.availability_id = ? AND ma.is_booked = FALSE
+        WHERE s.session_id = ? 
+          AND ma.availability_id = ? 
+          AND ma.is_booked = FALSE
+          AND (
+            (ma.is_online = TRUE AND ? = 'online') OR
+            (ma.is_offline = TRUE AND ? = 'offline')
+          )
         `,
-        [sessionId, AvailabilityID]
+        [sessionId, AvailabilityID, medium, medium]
       );
+
       console.log("Session and availability check result:", sessionRows);
       if (sessionRows.length === 0) {
         // Debug why the query failed
@@ -87,7 +108,7 @@ export class StudentSessionController {
           [sessionId]
         );
         const [availabilityCheck] = await db.query<RowDataPacket[]>(
-          "SELECT availability_id, mentor_id, is_booked FROM Mentor_Availability WHERE availability_id = ?",
+          "SELECT availability_id, mentor_id, is_booked, is_online, is_offline FROM Mentor_Availability WHERE availability_id = ?",
           [AvailabilityID]
         );
         console.log("Session exists:", sessionCheck);
@@ -105,6 +126,11 @@ export class StudentSessionController {
           sessionCheck[0].mentor_id !== availabilityCheck[0].mentor_id
         ) {
           errorMessage = "Session and availability belong to different mentors";
+        } else if (
+          (medium === "online" && !availabilityCheck[0].is_online) ||
+          (medium === "offline" && !availabilityCheck[0].is_offline)
+        ) {
+          errorMessage = `Availability is not marked as ${medium}`;
         }
 
         await db.query("ROLLBACK");
@@ -112,7 +138,7 @@ export class StudentSessionController {
       }
       const sessionData = sessionRows[0];
 
-      // Step 3: Check for overlapping bookings in Mentor_Availability and One_On_One_Sessions
+      // Step 3: Check for overlapping bookings
       const [overlappingRows] = await db.query<RowDataPacket[]>(
         `
         SELECT COUNT(*) as count
@@ -149,18 +175,18 @@ export class StudentSessionController {
         });
       }
 
-      // Step 4: Insert new record in One_On_One_Sessions (Value Addition)
+      // Step 4: Insert into One_On_One_Sessions
       const oneOnOneSessionId = crypto.randomUUID();
       const [insertResult] = await db.query(
         `
-        INSERT INTO One_On_One_Sessions (one_on_one_session_id, availability_id, student_id, created_at)
-        VALUES (?, ?, ?, NOW())
+        INSERT INTO One_On_One_Sessions (one_on_one_session_id, availability_id, student_id, created_at, medium)
+        VALUES (?, ?, ?, NOW(), ?)
         `,
-        [oneOnOneSessionId, AvailabilityID, student.student_id]
+        [oneOnOneSessionId, AvailabilityID, student.student_id, medium]
       );
       console.log("Inserted into One_On_One_Sessions:", insertResult);
 
-      // Step 5: Update Mentor_Availability to mark as booked and set session_id (Value Change)
+      // Step 5: Update Mentor_Availability
       const [updateResult] = await db.query(
         `
         UPDATE Mentor_Availability
