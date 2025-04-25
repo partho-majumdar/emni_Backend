@@ -75,7 +75,7 @@ router
 router.get(
   "/mavaliableat/:mentorId",
   authenticateToken as express.RequestHandler,
-  
+  requireStudent as express.RequestHandler,
   MentorAvailabilityController.getMentorAvailability as express.RequestHandler
 );
 

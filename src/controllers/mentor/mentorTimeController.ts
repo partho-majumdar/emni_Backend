@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import pool from "../../config/database";
 import { v4 as uuidv4 } from "uuid";
+import { RowDataPacket, ResultSetHeader } from "mysql2";
 
 interface AuthenticatedRequest extends Request {
   user?: { user_id: string; user_type: string; email?: string };
@@ -30,7 +31,6 @@ function parseIsoToDateTime(isoString: string): { date: string; time: string } {
 }
 
 export class MentorAvailabilityController {
-  // POST /api/mentor/availability/add
   static async addAvailability(req: AuthenticatedRequest, res: Response) {
     const user_id = req.user?.user_id;
     const { startTime, endTime, medium } = req.body as AvailabilityInput;
@@ -210,6 +210,109 @@ export class MentorAvailabilityController {
     } catch (error) {
       console.error("Get availabilities error:", error);
       res.status(500).json({ message: "Server error" });
+    }
+  }
+
+  static async deleteAvailability(req: AuthenticatedRequest, res: Response) {
+    const user_id = req.user?.user_id;
+    const { availability_id } = req.params;
+
+    if (!user_id) {
+      return res
+        .status(401)
+        .json({ success: false, message: "Unauthorized: No user ID" });
+    }
+
+    if (!availability_id) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Availability ID is required" });
+    }
+
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+
+      // 1. Verify the user is a mentor
+      const [mentorRows] = await connection.execute<RowDataPacket[]>(
+        "SELECT mentor_id FROM Mentors WHERE user_id = ?",
+        [user_id]
+      );
+
+      if (mentorRows.length === 0) {
+        await connection.rollback();
+        return res.status(403).json({
+          success: false,
+          message: "Only mentors can delete availability",
+        });
+      }
+      const mentor_id = mentorRows[0].mentor_id;
+
+      // 2. Check if availability exists and belongs to this mentor
+      const [availabilityRows] = await connection.execute<RowDataPacket[]>(
+        `SELECT 
+                availability_id, 
+                is_booked,
+                status
+             FROM Mentor_Availability 
+             WHERE availability_id = ? AND mentor_id = ?`,
+        [availability_id, mentor_id]
+      );
+
+      if (availabilityRows.length === 0) {
+        await connection.rollback();
+        return res.status(404).json({
+          success: false,
+          message: "Availability not found or doesn't belong to you",
+        });
+      }
+
+      const availability = availabilityRows[0];
+
+      // 3. Prevent deletion if already booked
+      if (availability.is_booked) {
+        await connection.rollback();
+        return res.status(400).json({
+          success: false,
+          message: "Cannot delete booked availability",
+        });
+      }
+
+      // 4. Delete from Availability_Medium_Details first (due to foreign key constraint)
+      await connection.execute(
+        "DELETE FROM Availability_Medium_Details WHERE availability_id = ?",
+        [availability_id]
+      );
+
+      // 5. Delete from Mentor_Availability
+      const [deleteResult] = await connection.execute<ResultSetHeader>(
+        "DELETE FROM Mentor_Availability WHERE availability_id = ?",
+        [availability_id]
+      );
+
+      await connection.commit();
+
+      if (deleteResult.affectedRows === 0) {
+        return res.status(404).json({
+          success: false,
+          message: "Availability not found",
+        });
+      }
+
+      res.status(200).json({
+        success: true,
+        message: "Availability deleted successfully",
+      });
+    } catch (error) {
+      await connection.rollback();
+      console.error("Delete availability error:", error);
+      res.status(500).json({
+        success: false,
+        message: "Server error",
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+    } finally {
+      connection.release();
     }
   }
 }
