@@ -8,6 +8,7 @@ Here's a list of all the endpoints from the provided API documentation:
 5. `DELETE api/sessions/{sessionId}` - Delete session (implied from context)
 6. `GET api/sessions/student/interest` - Get session list for student (interest-based)
 7. `GET api/sessions/student/others` - Get session list for student (others)
+8. `GET api/student/findmentor/interest` - Student find mentor based on interest
 
 ### B. Student
 1. `GET api/student/booked/{studentID}` - Get booked sessions of a student
