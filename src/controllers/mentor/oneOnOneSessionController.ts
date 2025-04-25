@@ -595,7 +595,8 @@ export class oneOnOneSessionController {
           s.duration_mins AS DurationInMinutes,
           s.is_online,
           s.is_offline,
-          s.description
+          s.description,
+          s.price
         FROM Sessions s
         JOIN Mentors m ON s.mentor_id = m.mentor_id
         JOIN Users u ON m.user_id = u.user_id
@@ -625,6 +626,7 @@ export class oneOnOneSessionController {
           DurationInMinutes: row.DurationInMinutes,
           session_medium,
           Description: row.description,
+          Price: row.price,
         } as SessionInfo;
       });
 
@@ -688,7 +690,8 @@ export class oneOnOneSessionController {
             s.duration_mins AS DurationInMinutes,
             s.is_online,
             s.is_offline,
-            s.description
+            s.description,
+            s.price
           FROM Sessions s
           JOIN Mentors m ON s.mentor_id = m.mentor_id
           JOIN Users u ON m.user_id = u.user_id`
@@ -713,6 +716,7 @@ export class oneOnOneSessionController {
             DurationInMinutes: row.DurationInMinutes,
             session_medium,
             Description: row.description,
+            Price: row.price,
           } as SessionInfo;
         });
       } else {
@@ -731,7 +735,8 @@ export class oneOnOneSessionController {
             s.duration_mins AS DurationInMinutes,
             s.is_online,
             s.is_offline,
-            s.description
+            s.description,
+            s.price
           FROM Sessions s
           JOIN Mentors m ON s.mentor_id = m.mentor_id
           JOIN Users u ON m.user_id = u.user_id
@@ -764,6 +769,7 @@ export class oneOnOneSessionController {
             DurationInMinutes: row.DurationInMinutes,
             session_medium,
             Description: row.description,
+            Price: row.price,
           } as SessionInfo;
         });
       }

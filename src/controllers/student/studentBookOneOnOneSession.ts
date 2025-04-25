@@ -2,10 +2,12 @@ import { Request, Response } from "express";
 import db from "../../config/database";
 import { RowDataPacket } from "mysql2";
 import crypto from "crypto";
+import cron from "node-cron";
 
 // Interface for request body
 interface BookSessionRequest {
   AvailabilityID: string;
+  medium: "online" | "offline";
 }
 
 // Define JwtPayload for JWT authentication
@@ -17,13 +19,6 @@ interface JwtPayload {
 // Extend Request for type safety
 interface AuthenticatedRequest extends Request {
   user?: JwtPayload;
-}
-
-// Interface for response data
-interface BookSessionResponse {
-  sessionId: string;
-  availabilityId: string;
-  oneOnOneSessionId: string;
 }
 
 export class StudentSessionController {
@@ -74,23 +69,23 @@ export class StudentSessionController {
       }
       const student = studentRows[0];
 
-      // Step 2: Validate session and availability (FIXED: Added missing parenthesis)
+      // Step 2: Validate session and availability
       const [sessionRows] = await db.query<RowDataPacket[]>(
         `
-        SELECT 
-          s.session_id, 
-          ma.availability_id, 
-          ma.is_booked, 
-          ma.start_time, 
-          ma.end_time, 
+        SELECT
+          s.session_id,
+          ma.availability_id,
+          ma.is_booked,
+          ma.start_time,
+          ma.end_time,
           ma.available_date,
           ma.mentor_id,
           ma.is_online,
           ma.is_offline
         FROM Sessions s
         JOIN Mentor_Availability ma ON s.mentor_id = ma.mentor_id
-        WHERE s.session_id = ? 
-          AND ma.availability_id = ? 
+        WHERE s.session_id = ?
+          AND ma.availability_id = ?
           AND ma.is_booked = FALSE
           AND (
             (ma.is_online = TRUE AND ? = 'online') OR
@@ -233,4 +228,113 @@ export class StudentSessionController {
       });
     }
   }
+
+  static async updateSessionStatuses() {
+    try {
+      await db.query("START TRANSACTION");
+
+      // Update Ongoing sessions
+      await db.query(
+        `UPDATE Mentor_Availability
+         SET status = 'Ongoing'
+         WHERE is_booked = TRUE
+           AND status = 'Upcoming'
+           AND available_date = CURDATE()
+           AND start_time <= CURTIME()
+           AND end_time >= CURTIME()`
+      );
+
+      // Update Completed sessions
+      await db.query(
+        `UPDATE Mentor_Availability
+         SET status = 'Completed'
+         WHERE is_booked = TRUE
+           AND status IN ('Upcoming', 'Ongoing')
+           AND (
+             available_date < CURDATE() OR
+             (available_date = CURDATE() AND end_time < CURTIME())
+           )`
+      );
+
+      // Update Cancelled sessions
+      await db.query(
+        `UPDATE Mentor_Availability
+         SET status = 'Cancelled'
+         WHERE is_booked = FALSE
+           AND status = 'Upcoming'
+           AND (
+             available_date < CURDATE() OR
+             (available_date = CURDATE() AND end_time < CURTIME())
+           )`
+      );
+
+      await db.query("COMMIT");
+      console.log("Session statuses updated successfully");
+      return { success: true, message: "Session statuses updated" };
+    } catch (error: any) {
+      await db.query("ROLLBACK");
+      console.error("Error updating session statuses:", error);
+      return { success: false, message: error.message };
+    }
+  }
+
+  static async getSessionStatus(req: AuthenticatedRequest, res: Response) {
+    const { availabilityId } = req.params;
+
+    try {
+      const [session] = await db.query<RowDataPacket[]>(
+        `
+        SELECT 
+          ma.status,
+          ma.available_date,
+          ma.start_time,
+          ma.end_time,
+          s.session_title,
+          s.description,
+          s.duration_mins,
+          s.price,
+          u.name as mentor_name,
+          oos.medium,
+          oos.created_at as booking_time
+        FROM Mentor_Availability ma
+        JOIN Sessions s ON ma.session_id = s.session_id
+        JOIN Mentors m ON ma.mentor_id = m.mentor_id
+        JOIN Users u ON m.user_id = u.user_id
+        LEFT JOIN One_On_One_Sessions oos ON ma.availability_id = oos.availability_id
+        WHERE ma.availability_id = ?
+        `,
+        [availabilityId]
+      );
+
+      if (session.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: "Session not found",
+        });
+      }
+
+      res.status(200).json({
+        success: true,
+        data: session[0],
+      });
+    } catch (error: any) {
+      console.error("Error getting session status:", error);
+      res.status(500).json({
+        success: false,
+        message: "Failed to get session status",
+        error: error.message,
+      });
+    }
+  }
 }
+
+// Cron job for status updates (runs every 10 minutes)
+cron.schedule("*/10 * * * *", async () => {
+  console.log("Running session status update...");
+  try {
+    const result = await StudentSessionController.updateSessionStatuses();
+    console.log("Status update result:", result);
+  } catch (error) {
+    console.error("Error in scheduled status update:", error);
+  }
+});

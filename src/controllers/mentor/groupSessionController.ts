@@ -30,6 +30,11 @@ interface GroupSession {
     max: number;
   };
   platform_link: string;
+  previewParticipants?: {
+    id: string;
+    name: string;
+    photoLink: string;
+  }[];
 }
 
 // Response interface for create (unchanged)
@@ -422,6 +427,79 @@ class GroupSessionController {
     }
   }
 
+  // static async getAllGroupSessions(
+  //   req: Request,
+  //   res: Response,
+  //   next: NextFunction
+  // ): Promise<void> {
+  //   try {
+  //     // Fetch all group sessions with mentor details and participant counts
+  //     const [sessionRows]: any[] = await pool.query(
+  //       `SELECT
+  //         gs.group_session_id AS id,
+  //         gs.title,
+  //         gs.description,
+  //         gs.duration_mins AS durationInMinutes,
+  //         gs.session_date AS startTime,
+  //         gs.max_participants AS maxParticipants,
+  //         (SELECT COUNT(*) FROM Group_Session_Participants gsp2
+  //          WHERE gsp2.group_session_id = gs.group_session_id
+  //          AND gsp2.status = 'registered') AS currentParticipants,
+  //         m.mentor_id,
+  //         u.name AS mentor_name,
+  //         u.image_url,
+  //         gs.platform AS platform_link
+  //       FROM Group_Sessions gs
+  //       JOIN Mentors m ON gs.mentor_id = m.mentor_id
+  //       JOIN Users u ON m.user_id = u.user_id
+  //       LEFT JOIN Group_Session_Participants gsp ON gs.group_session_id = gsp.group_session_id
+  //       GROUP BY
+  //         gs.group_session_id, gs.title, gs.description,
+  //         gs.duration_mins, gs.session_date, gs.max_participants,
+  //         m.mentor_id, u.name, u.image_url, gs.platform
+  //       ORDER BY gs.session_date ASC`
+  //     );
+
+  //     const baseUrl = "https://evidently-handy-troll.ngrok-free.app";
+
+  //     // Map database rows to GroupSession type
+  //     const groupSessions: GroupSession[] = sessionRows.map((row: any) => ({
+  //       id: row.id,
+  //       title: row.title,
+  //       description: row.description,
+  //       durationInMinutes: row.durationInMinutes,
+  //       startTime: new Date(row.startTime).toISOString(),
+  //       mentor: {
+  //         id: row.mentor_id,
+  //         name: row.mentor_name,
+  //         photoLink: row.image_url
+  //           ? `${baseUrl}/api/mentor/image/${row.mentor_id}`
+  //           : "",
+  //       },
+  //       participants: {
+  //         current: parseInt(row.currentParticipants, 10),
+  //         max: row.maxParticipants,
+  //       },
+  //       platform_link: row.platform_link,
+  //     }));
+
+  //     // Construct response
+  //     const response: GroupSessionListResponse = {
+  //       success: true,
+  //       data: groupSessions,
+  //     };
+
+  //     res.status(200).json(response);
+  //   } catch (error: any) {
+  //     console.error("Error fetching all group sessions:", error);
+  //     res.status(500).json({
+  //       success: false,
+  //       error: "Internal server error",
+  //       details: error.message,
+  //     });
+  //   }
+  // }
+
   static async getAllGroupSessions(
     req: Request,
     res: Response,
@@ -457,6 +535,47 @@ class GroupSessionController {
 
       const baseUrl = "https://evidently-handy-troll.ngrok-free.app";
 
+      // Get all session IDs for batch participant query
+      const sessionIds = sessionRows.map((row: any) => row.id);
+
+      // Alternative approach for MySQL versions without window function support
+      // First get all registered participants ordered by joined_at
+      const [allParticipants]: any[] =
+        sessionIds.length > 0
+          ? await pool.query(
+              `SELECT 
+          gsp.group_session_id,
+          s.student_id AS id,
+          u.name,
+          u.image_url,
+          gsp.joined_at
+        FROM Group_Session_Participants gsp
+        JOIN Students s ON gsp.student_id = s.student_id
+        JOIN Users u ON s.user_id = u.user_id
+        WHERE gsp.group_session_id IN (?)
+        AND gsp.status = 'registered'
+        ORDER BY gsp.group_session_id, gsp.joined_at ASC`,
+              [sessionIds]
+            )
+          : [];
+
+      // Organize participants by session ID and take first 5 for each session
+      const participantsBySession: Record<string, any[]> = {};
+      allParticipants.forEach((participant: any) => {
+        if (!participantsBySession[participant.group_session_id]) {
+          participantsBySession[participant.group_session_id] = [];
+        }
+        if (participantsBySession[participant.group_session_id].length < 5) {
+          participantsBySession[participant.group_session_id].push({
+            id: participant.id,
+            name: participant.name,
+            photoLink: participant.image_url
+              ? `${baseUrl}/api/student/image/${participant.id}`
+              : "",
+          });
+        }
+      });
+
       // Map database rows to GroupSession type
       const groupSessions: GroupSession[] = sessionRows.map((row: any) => ({
         id: row.id,
@@ -476,6 +595,7 @@ class GroupSessionController {
           max: row.maxParticipants,
         },
         platform_link: row.platform_link,
+        previewParticipants: participantsBySession[row.id] || [],
       }));
 
       // Construct response
@@ -513,15 +633,15 @@ class GroupSessionController {
 
       // Fetch the specific group session with mentor details and participant count
       const [sessionRows]: any[] = await pool.query(
-        `SELECT 
+        `SELECT
           gs.group_session_id AS id,
           gs.title,
           gs.description,
           gs.duration_mins AS durationInMinutes,
           gs.session_date AS startTime,
           gs.max_participants AS maxParticipants,
-          (SELECT COUNT(*) FROM Group_Session_Participants gsp2 
-           WHERE gsp2.group_session_id = gs.group_session_id 
+          (SELECT COUNT(*) FROM Group_Session_Participants gsp2
+           WHERE gsp2.group_session_id = gs.group_session_id
            AND gsp2.status = 'registered') AS currentParticipants,
           m.mentor_id,
           u.name AS mentor_name,
@@ -532,8 +652,8 @@ class GroupSessionController {
         JOIN Users u ON m.user_id = u.user_id
         LEFT JOIN Group_Session_Participants gsp ON gs.group_session_id = gsp.group_session_id
         WHERE gs.group_session_id = ?
-        GROUP BY 
-          gs.group_session_id, gs.title, gs.description, 
+        GROUP BY
+          gs.group_session_id, gs.title, gs.description,
           gs.duration_mins, gs.session_date, gs.max_participants,
           m.mentor_id, u.name, u.image_url, gs.platform`,
         [groupSessionId]

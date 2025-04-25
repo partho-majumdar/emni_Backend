@@ -624,6 +624,7 @@ export class StudentAuthController {
         res.status(201).json({
           success: true,
           jwtToken: token,
+          student_id: student_id,
         });
       } catch (error) {
         console.error("Student register error:", error);
@@ -688,6 +689,7 @@ export class StudentAuthController {
       res.json({
         success: true,
         jwtToken: token,
+        student_id: student.student_id,
       });
     } catch (error) {
       console.error("Student login error:", error);

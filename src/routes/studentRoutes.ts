@@ -6,22 +6,19 @@ import {
   requireAnyAuthenticated,
 } from "../middleware/auth";
 
-import {
-  // getStudentInterests,
-  // addStudentInterests,
-  // updateStudentInterests,
-  StudentInterestController,
-} from "../controllers/student/interestController";
-import { getSuggestedMentors } from "../controllers/student/mentorSuggestionController";
+import { StudentInterestController } from "../controllers/student/interestController";
 import MentorAvailabilityController from "../controllers/student/studentSeeMentorFreeTime";
 import { StudentSessionController } from "../controllers/student/studentBookOneOnOneSession";
+import { BookGroupSessionController } from "../controllers/student/studentBookGroupSession";
+import { getSuggestedMentorsInterestBased } from "../controllers/student/mentorSuggestionController";
 
 const router = Router();
 
 router.get(
-  "/suggested-mentors",
+  "/findmentor/interest",
   authenticateToken as express.RequestHandler,
-  getSuggestedMentors as express.RequestHandler
+  requireStudent as express.RequestHandler,
+  getSuggestedMentorsInterestBased as express.RequestHandler
 );
 
 // router.get(
@@ -77,8 +74,17 @@ router
 
 router.get(
   "/mavaliableat/:mentorId",
+  authenticateToken as express.RequestHandler,
+  
   MentorAvailabilityController.getMentorAvailability as express.RequestHandler
 );
+
+// router.get(
+//   "/booked/:studentID",
+//   authenticateToken as express.RequestHandler,
+//   requireStudent as express.RequestHandler,
+//   BookGroupSessionController.getStudentBookedSessions as express.RequestHandler
+// );
 
 router.post(
   "/payment/:sessionID",

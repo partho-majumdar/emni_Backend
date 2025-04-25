@@ -11,9 +11,11 @@ class MentorAvailabilityController {
           availability_id as id,
           CONCAT(available_date, ' ', start_time) as start,
           CONCAT(available_date, ' ', end_time) as end,
-          is_booked as booked
+          is_booked,
+          COALESCE(session_id, '') as session_id
         FROM Mentor_Availability
-        WHERE mentor_id = ? AND is_booked = FALSE
+        WHERE mentor_id = ?
+          AND CONCAT(available_date, ' ', start_time) > NOW()
         ORDER BY available_date, start_time`,
         [mentorId]
       );
@@ -25,12 +27,12 @@ class MentorAvailabilityController {
         });
       }
 
-      // Format the response as requested
+      // Format the response
       const formattedAvailability = availabilitySlots.map((slot: any) => ({
         id: slot.id,
         start: new Date(slot.start),
         end: new Date(slot.end),
-        booked: Boolean(slot.booked),
+        booked: slot.is_booked ? slot.session_id : "",
       }));
 
       res.status(200).json(formattedAvailability);

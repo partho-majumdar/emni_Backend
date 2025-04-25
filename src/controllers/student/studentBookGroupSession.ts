@@ -1,11 +1,21 @@
 import { Request, Response } from "express";
 import pool from "../../config/database";
+import db from "../../config/database"; // Ensure 'db' is properly imported
 import { RowDataPacket } from "mysql2";
 
 // Interface for request body
 interface GroupSessionRequest {
   GroupSessionId: string;
   ParticipantId: string;
+}
+
+// Interface for booked session type
+interface BookedSessionType {
+  start: Date;
+  end: Date;
+  session_type: "1:1" | "group";
+  sessionId: string;
+  medium: "online" | "offline";
 }
 
 // Interface for response data
@@ -275,7 +285,6 @@ export class BookGroupSessionController {
         `,
         [GroupSessionId, GroupSessionId]
       );
-      //   console.log("Updated participant count:", updatedParticipants);
 
       await pool.query("COMMIT");
 
@@ -333,13 +342,14 @@ export class BookGroupSessionController {
           .json({ success: false, message: "Group session not found" });
       }
 
-      // Fetch participants
+      // Fetch participants with email
       const [participantRows] = await pool.query<RowDataPacket[]>(
         `
         SELECT 
           s.student_id AS id,
           u.name,
           u.image_url,
+          u.email,  
           gsp.joined_at AS joinedAt,
           gsp.status
         FROM Group_Session_Participants gsp
@@ -354,7 +364,7 @@ export class BookGroupSessionController {
 
       const baseUrl = "https://evidently-handy-troll.ngrok-free.app";
 
-      // Map to GroupSessionParticipantInfo
+      // Map to GroupSessionParticipantInfo with added points and email
       const participants: GroupSessionParticipantInfo[] = participantRows.map(
         (row) => ({
           id: row.id,
@@ -364,6 +374,8 @@ export class BookGroupSessionController {
             : "",
           joinedAt: new Date(row.joinedAt).toISOString(),
           status: row.status,
+          points: Math.floor(Math.random() * 100), // Add random points (0-99)
+          email: row.email, // Add email from Users table
         })
       );
 
@@ -380,7 +392,6 @@ export class BookGroupSessionController {
       res.status(500).json({
         success: false,
         message: "Server error",
-        error: error.message,
       });
     }
   }
