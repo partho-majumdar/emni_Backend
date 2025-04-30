@@ -5,7 +5,7 @@ import {
   requireStudent,
   requireMentorOrStudent,
 } from "../middleware/auth";
-import GroupSessionController from "../controllers/mentor/groupSessionController";
+import GroupSessionController from "../controllers/mentor/groupSessionController1";
 import { BookGroupSessionController } from "../controllers/student/studentBookGroupSession";
 
 const router = Router();
@@ -51,12 +51,19 @@ router.get(
 );
 
 // D.6 Create Group Session
-router.post(
-  "/create",
-  authenticateToken as express.RequestHandler,
-  requireMentor as express.RequestHandler,
-  GroupSessionController.createGroupSession as express.RequestHandler
-);
+router
+  .post(
+    "/create",
+    authenticateToken as express.RequestHandler,
+    requireMentor as express.RequestHandler,
+    GroupSessionController.createGroupSession as express.RequestHandler
+  )
+  .put(
+    "/:groupSessionId",
+    authenticateToken as express.RequestHandler,
+    requireMentor as express.RequestHandler,
+    GroupSessionController.updateGroupSession as express.RequestHandler
+  );
 
 // D.7 Delete Group Session
 router.delete(

@@ -34,20 +34,20 @@ router.post(
 );
 
 // A.4 Update Session (implied)
-// router.put(
-//   "/:sessionId",
-//   authenticateToken as express.RequestHandler,
-//   requireMentor as express.RequestHandler,
-//   oneOnOneSessionController.updateSession as express.RequestHandler
-// );
+router.put(
+  "/:sessionId",
+  authenticateToken as express.RequestHandler,
+  requireMentor as express.RequestHandler,
+  oneOnOneSessionController.updateSession as express.RequestHandler
+);
 
 // A.5 Delete Session (implied)
-// router.delete(
-//   "/:sessionId",
-//   authenticateToken as express.RequestHandler,
-//   requireMentor as express.RequestHandler,
-//   oneOnOneSessionController.deleteSession as express.RequestHandler
-// );
+router.delete(
+  "/:sessionId",
+  authenticateToken as express.RequestHandler,
+  requireMentor as express.RequestHandler,
+  oneOnOneSessionController.deleteSession as express.RequestHandler
+);
 
 // A.6 Get Sessions for Student (interest-based)
 router.get(

@@ -1,0 +1,10 @@
+version: '3.8'
+services:
+  app:
+    image: project-show
+    ports:
+      - "5000:3000"
+    volumes:
+      - "./:/usr/src/app"
+      - "/usr/src/app/node_modules"
+    container_name: dbms-project-show

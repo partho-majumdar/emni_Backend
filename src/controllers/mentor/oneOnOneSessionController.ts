@@ -164,6 +164,7 @@ export class oneOnOneSessionController {
       await connection.commit();
 
       const baseUrl = "https://evidently-handy-troll.ngrok-free.app";
+      // const baseUrl = "http://localhost:5000";
       const mentorImageLink = mentorDetails.image_url
         ? `${baseUrl}/api/mentor/image/${mentor_id}`
         : "";
@@ -193,198 +194,198 @@ export class oneOnOneSessionController {
     }
   }
 
-  // static async updateSession(req: AuthenticatedRequest, res: Response) {
-  //   const user_id = req.user?.user_id;
-  //   const sessionId = req.params.sessionId;
-  //   const {
-  //     title,
-  //     DurationInMinutes,
-  //     session_medium,
-  //     Description,
-  //     Price,
-  //     type,
-  //   } = req.body as UpdateSessionInput;
+  static async updateSession(req: AuthenticatedRequest, res: Response) {
+    const user_id = req.user?.user_id;
+    const sessionId = req.params.sessionId;
+    const {
+      title,
+      DurationInMinutes,
+      session_medium,
+      Description,
+      Price,
+      type,
+    } = req.body as UpdateSessionInput;
 
-  //   if (!user_id) {
-  //     return res.status(401).json({ message: "Unauthorized: No user ID" });
-  //   }
+    if (!user_id) {
+      return res.status(401).json({ message: "Unauthorized: No user ID" });
+    }
 
-  //   if (!sessionId) {
-  //     return res.status(400).json({ message: "Session ID is required" });
-  //   }
+    if (!sessionId) {
+      return res.status(400).json({ message: "Session ID is required" });
+    }
 
-  //   // Validate at least one field is provided for update
-  //   if (
-  //     !title &&
-  //     !DurationInMinutes &&
-  //     !session_medium &&
-  //     !Description &&
-  //     Price === undefined &&
-  //     !type
-  //   ) {
-  //     return res
-  //       .status(400)
-  //       .json({ message: "At least one field must be provided for update" });
-  //   }
+    // Validate at least one field is provided for update
+    if (
+      !title &&
+      !DurationInMinutes &&
+      !session_medium &&
+      !Description &&
+      Price === undefined &&
+      !type
+    ) {
+      return res
+        .status(400)
+        .json({ message: "At least one field must be provided for update" });
+    }
 
-  //   const connection = await pool.getConnection();
-  //   try {
-  //     await connection.beginTransaction();
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
 
-  //     // Check if user is a mentor and owns the session
-  //     const [mentorRows] = await connection.execute(
-  //       `SELECT m.mentor_id
-  //        FROM Mentors m
-  //        JOIN Sessions s ON m.mentor_id = s.mentor_id
-  //        WHERE m.user_id = ? AND s.session_id = ?`,
-  //       [user_id, sessionId]
-  //     );
-  //     const mentor = (mentorRows as any[])[0];
-  //     if (!mentor) {
-  //       await connection.rollback();
-  //       return res.status(403).json({
-  //         message: "Unauthorized: Only the session's mentor can update it",
-  //       });
-  //     }
+      // Check if user is a mentor and owns the session
+      const [mentorRows] = await connection.execute(
+        `SELECT m.mentor_id
+         FROM Mentors m
+         JOIN Sessions s ON m.mentor_id = s.mentor_id
+         WHERE m.user_id = ? AND s.session_id = ?`,
+        [user_id, sessionId]
+      );
+      const mentor = (mentorRows as any[])[0];
+      if (!mentor) {
+        await connection.rollback();
+        return res.status(403).json({
+          message: "Unauthorized: Only the session's mentor can update it",
+        });
+      }
 
-  //     // Build update query dynamically based on provided fields
-  //     const updates: string[] = [];
-  //     const values: any[] = [];
+      // Build update query dynamically based on provided fields
+      const updates: string[] = [];
+      const values: any[] = [];
 
-  //     if (title) {
-  //       updates.push("session_title = ?");
-  //       values.push(title);
-  //     }
-  //     if (DurationInMinutes !== undefined) {
-  //       if (DurationInMinutes <= 0) {
-  //         await connection.rollback();
-  //         return res
-  //           .status(400)
-  //           .json({ message: "Duration must be a positive number" });
-  //       }
-  //       updates.push("duration_mins = ?");
-  //       values.push(DurationInMinutes);
-  //     }
-  //     if (session_medium && Array.isArray(session_medium)) {
-  //       const isOnline = session_medium.includes("online");
-  //       const isOffline = session_medium.includes("offline");
-  //       if (!isOnline && !isOffline) {
-  //         await connection.rollback();
-  //         return res.status(400).json({
-  //           message: "Session medium must include 'online' or 'offline'",
-  //         });
-  //       }
-  //       updates.push("is_online = ?, is_offline = ?");
-  //       values.push(isOnline ? 1 : 0, isOffline ? 1 : 0);
-  //     }
-  //     if (Description) {
-  //       updates.push("description = ?");
-  //       values.push(Description);
-  //     }
-  //     if (Price !== undefined) {
-  //       if (Price < 0) {
-  //         await connection.rollback();
-  //         return res.status(400).json({ message: "Price cannot be negative" });
-  //       }
-  //       updates.push("price = ?");
-  //       values.push(Price);
-  //     }
-  //     if (type) {
-  //       updates.push("type = ?");
-  //       values.push(type);
-  //     }
+      if (title) {
+        updates.push("session_title = ?");
+        values.push(title);
+      }
+      if (DurationInMinutes !== undefined) {
+        if (DurationInMinutes <= 0) {
+          await connection.rollback();
+          return res
+            .status(400)
+            .json({ message: "Duration must be a positive number" });
+        }
+        updates.push("duration_mins = ?");
+        values.push(DurationInMinutes);
+      }
+      if (session_medium && Array.isArray(session_medium)) {
+        const isOnline = session_medium.includes("online");
+        const isOffline = session_medium.includes("offline");
+        if (!isOnline && !isOffline) {
+          await connection.rollback();
+          return res.status(400).json({
+            message: "Session medium must include 'online' or 'offline'",
+          });
+        }
+        updates.push("is_online = ?, is_offline = ?");
+        values.push(isOnline ? 1 : 0, isOffline ? 1 : 0);
+      }
+      if (Description) {
+        updates.push("description = ?");
+        values.push(Description);
+      }
+      if (Price !== undefined) {
+        if (Price < 0) {
+          await connection.rollback();
+          return res.status(400).json({ message: "Price cannot be negative" });
+        }
+        updates.push("price = ?");
+        values.push(Price);
+      }
+      if (type) {
+        updates.push("type = ?");
+        values.push(type);
+      }
 
-  //     if (updates.length === 0) {
-  //       await connection.rollback();
-  //       return res.status(400).json({ message: "No valid fields to update" });
-  //     }
+      if (updates.length === 0) {
+        await connection.rollback();
+        return res.status(400).json({ message: "No valid fields to update" });
+      }
 
-  //     values.push(sessionId);
-  //     const UPDATE_SESSION = `
-  //       UPDATE Sessions
-  //       SET ${updates.join(", ")}
-  //       WHERE session_id = ?
-  //     `;
+      values.push(sessionId);
+      const UPDATE_SESSION = `
+        UPDATE Sessions
+        SET ${updates.join(", ")}
+        WHERE session_id = ?
+      `;
 
-  //     const [result] = await connection.execute(UPDATE_SESSION, values);
+      const [result] = await connection.execute(UPDATE_SESSION, values);
 
-  //     if ((result as any).affectedRows === 0) {
-  //       await connection.rollback();
-  //       return res.status(404).json({ message: "Session not found" });
-  //     }
+      if ((result as any).affectedRows === 0) {
+        await connection.rollback();
+        return res.status(404).json({ message: "Session not found" });
+      }
 
-  //     await connection.commit();
-  //     res.status(200).json({
-  //       success: true,
-  //       message: "Session updated successfully",
-  //       sessionId,
-  //     });
-  //   } catch (error) {
-  //     await connection.rollback();
-  //     console.error("Update session error:", error);
-  //     res.status(500).json({ message: "Server error" });
-  //   } finally {
-  //     connection.release();
-  //   }
-  // }
+      await connection.commit();
+      res.status(200).json({
+        success: true,
+        message: "Session updated successfully",
+        sessionId,
+      });
+    } catch (error) {
+      await connection.rollback();
+      console.error("Update session error:", error);
+      res.status(500).json({ message: "Server error" });
+    } finally {
+      connection.release();
+    }
+  }
 
-  // static async deleteSession(req: AuthenticatedRequest, res: Response) {
-  //   const user_id = req.user?.user_id;
-  //   const sessionId = req.params.sessionId;
+  static async deleteSession(req: AuthenticatedRequest, res: Response) {
+    const user_id = req.user?.user_id;
+    const sessionId = req.params.sessionId;
 
-  //   if (!user_id) {
-  //     return res.status(401).json({ message: "Unauthorized: No user ID" });
-  //   }
+    if (!user_id) {
+      return res.status(401).json({ message: "Unauthorized: No user ID" });
+    }
 
-  //   if (!sessionId) {
-  //     return res.status(400).json({ message: "Session ID is required" });
-  //   }
+    if (!sessionId) {
+      return res.status(400).json({ message: "Session ID is required" });
+    }
 
-  //   const connection = await pool.getConnection();
-  //   try {
-  //     await connection.beginTransaction();
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
 
-  //     // Check if user is a mentor and owns the session
-  //     const [mentorRows] = await connection.execute(
-  //       `SELECT m.mentor_id
-  //        FROM Mentors m
-  //        JOIN Sessions s ON m.mentor_id = s.mentor_id
-  //        WHERE m.user_id = ? AND s.session_id = ?`,
-  //       [user_id, sessionId]
-  //     );
-  //     const mentor = (mentorRows as any[])[0];
-  //     if (!mentor) {
-  //       await connection.rollback();
-  //       return res.status(403).json({
-  //         message: "Unauthorized: Only the session's mentor can delete it",
-  //       });
-  //     }
+      // Check if user is a mentor and owns the session
+      const [mentorRows] = await connection.execute(
+        `SELECT m.mentor_id
+         FROM Mentors m
+         JOIN Sessions s ON m.mentor_id = s.mentor_id
+         WHERE m.user_id = ? AND s.session_id = ?`,
+        [user_id, sessionId]
+      );
+      const mentor = (mentorRows as any[])[0];
+      if (!mentor) {
+        await connection.rollback();
+        return res.status(403).json({
+          message: "Unauthorized: Only the session's mentor can delete it",
+        });
+      }
 
-  //     const DELETE_SESSION = `
-  //       DELETE FROM Sessions
-  //       WHERE session_id = ?
-  //     `;
-  //     const [result] = await connection.execute(DELETE_SESSION, [sessionId]);
+      const DELETE_SESSION = `
+        DELETE FROM Sessions
+        WHERE session_id = ?
+      `;
+      const [result] = await connection.execute(DELETE_SESSION, [sessionId]);
 
-  //     if ((result as any).affectedRows === 0) {
-  //       await connection.rollback();
-  //       return res.status(404).json({ message: "Session not found" });
-  //     }
+      if ((result as any).affectedRows === 0) {
+        await connection.rollback();
+        return res.status(404).json({ message: "Session not found" });
+      }
 
-  //     await connection.commit();
-  //     res.status(200).json({
-  //       success: true,
-  //       message: "Session deleted successfully",
-  //       sessionId,
-  //     });
-  //   } catch (error) {
-  //     await connection.rollback();
-  //     console.error("Delete session error:", error);
-  //     res.status(500).json({ message: "Server error" });
-  //   } finally {
-  //     connection.release();
-  //   }
-  // }
+      await connection.commit();
+      res.status(200).json({
+        success: true,
+        message: "Session deleted successfully",
+        sessionId,
+      });
+    } catch (error) {
+      await connection.rollback();
+      console.error("Delete session error:", error);
+      res.status(500).json({ message: "Server error" });
+    } finally {
+      connection.release();
+    }
+  }
 
   static async getSessionListForParticularMentor(
     req: AuthenticatedRequest,
@@ -421,7 +422,8 @@ export class oneOnOneSessionController {
           s.duration_mins,
           s.is_online,
           s.is_offline,
-          s.description
+          s.description,
+          s.price
         FROM Sessions s
         JOIN Mentors m ON s.mentor_id = m.mentor_id
         JOIN Users u ON m.user_id = u.user_id
@@ -435,6 +437,7 @@ export class oneOnOneSessionController {
         if (row.is_offline) session_medium.push("offline");
 
         const baseUrl = "https://evidently-handy-troll.ngrok-free.app";
+        // const baseUrl = "http://localhost:5000";
         const mentorImageLink = row.image_url
           ? `${baseUrl}/api/mentor/image/${row.mentor_id}`
           : "";
@@ -449,6 +452,7 @@ export class oneOnOneSessionController {
           DurationInMinutes: row.duration_mins,
           session_medium,
           Description: row.description,
+          Price: row.price,
         } as SessionInfo;
       });
 
@@ -509,6 +513,7 @@ export class oneOnOneSessionController {
       if (sessionData.is_offline) session_medium.push("offline");
 
       const baseUrl = "https://evidently-handy-troll.ngrok-free.app";
+      // const baseUrl = "http://localhost:5000";
       const mentorImageLink = sessionData.image_url
         ? `${baseUrl}/api/mentor/image/${sessionData.mentor_id}`
         : "";
@@ -612,6 +617,7 @@ export class oneOnOneSessionController {
         if (row.is_offline) session_medium.push("offline");
 
         const baseUrl = "https://evidently-handy-troll.ngrok-free.app";
+        // const baseUrl = "http://localhost:5000";
         const mentorImageLink = row.mentorImage
           ? `${baseUrl}/api/mentor/image/${row.mentorId}`
           : "";
@@ -677,6 +683,7 @@ export class oneOnOneSessionController {
 
       let sessions;
       const baseUrl = "https://evidently-handy-troll.ngrok-free.app";
+      // const baseUrl = "http://localhost:5000";
 
       if (!Array.isArray(interestRows) || interestRows.length === 0) {
         const [allSessionRows] = await connection.execute(

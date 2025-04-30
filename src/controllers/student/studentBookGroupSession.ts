@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import pool from "../../config/database";
-import db from "../../config/database"; // Ensure 'db' is properly imported
+import db from "../../config/database";
 import { RowDataPacket } from "mysql2";
 
 // Interface for request body
@@ -363,8 +363,8 @@ export class BookGroupSessionController {
       console.log("Participants fetched:", participantRows);
 
       const baseUrl = "https://evidently-handy-troll.ngrok-free.app";
+      // const baseUrl = "http://localhost:5000";
 
-      // Map to GroupSessionParticipantInfo with added points and email
       const participants: GroupSessionParticipantInfo[] = participantRows.map(
         (row) => ({
           id: row.id,
@@ -374,12 +374,11 @@ export class BookGroupSessionController {
             : "",
           joinedAt: new Date(row.joinedAt).toISOString(),
           status: row.status,
-          points: Math.floor(Math.random() * 100), // Add random points (0-99)
-          email: row.email, // Add email from Users table
+          points: Math.floor(Math.random() * 100), 
+          email: row.email, 
         })
       );
 
-      // Construct response
       const response: ParticipantListResponse = {
         success: true,
         data: participants,
