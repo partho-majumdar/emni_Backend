@@ -1,0 +1,14 @@
+.vscode 
+node_modules
+Schema 
+file_structure.txt
+schema6.sql
+.env
+uploads 
+Schema.sql 
+rafi_updated_schema.sql
+old_mentorTimeController.ts
+myschema.sql 
+init.sql 
+
+
