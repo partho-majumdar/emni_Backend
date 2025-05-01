@@ -4,6 +4,7 @@ import {
   authenticateToken,
   requireMentor,
   requireAnyAuthenticated,
+  requireMentorOrStudent,
 } from "../middleware/auth";
 import { MentorInterestController } from "../controllers/mentor/interestController";
 import { MentorAvailabilityController } from "../controllers/mentor/mentorTimeController";
@@ -39,14 +40,13 @@ router
     authenticateToken as express.RequestHandler,
     requireMentor as express.RequestHandler,
     MentorAuthController.updateMentorProfile as express.RequestHandler
+  )
+  .get(
+    "/:mID",
+    authenticateToken as express.RequestHandler,
+    requireMentorOrStudent as express.RequestHandler,
+    MentorAuthController.getMentorProfileById as express.RequestHandler
   );
-
-// router.get(
-//   "/:mentor_id",
-//   authenticateToken as express.RequestHandler,
-//   requireAnyAuthenticated as express.RequestHandler,
-//   MentorAuthController.getProfile as express.RequestHandler
-// );
 // router.put(
 //   "/profile/edit",
 //   authenticateToken as express.RequestHandler,
