@@ -601,7 +601,8 @@ export class oneOnOneSessionController {
           s.is_online,
           s.is_offline,
           s.description,
-          s.price
+          s.price,
+          s.created_at
         FROM Sessions s
         JOIN Mentors m ON s.mentor_id = m.mentor_id
         JOIN Users u ON m.user_id = u.user_id
