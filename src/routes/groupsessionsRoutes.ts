@@ -5,7 +5,7 @@ import {
   requireStudent,
   requireMentorOrStudent,
 } from "../middleware/auth";
-import GroupSessionController from "../controllers/mentor/groupSessionController1";
+import GroupSessionController from "../controllers/mentor/groupSessionController";
 import { BookGroupSessionController } from "../controllers/student/studentBookGroupSession";
 
 const router = Router();

@@ -11,7 +11,7 @@ import MentorAvailabilityController from "../controllers/student/studentSeeMento
 import { StudentSessionController } from "../controllers/student/studentBookOneOnOneSession";
 import { BookGroupSessionController } from "../controllers/student/studentBookGroupSession";
 import { getSuggestedMentorsInterestBased } from "../controllers/student/mentorSuggestionController";
-import { getAllBookedSessions } from "../controllers/student/studentAllBookedSessions1";
+import { getAllBookedSessions } from "../controllers/student/studentAllBookedSessions";
 
 const router = Router();
 
