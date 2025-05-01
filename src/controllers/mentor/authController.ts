@@ -415,6 +415,89 @@ export class MentorAuthController {
     }
   }
 
+  static async getMentorProfileById(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { mID } = req.params;
+
+      if (!mID) {
+        return res.status(400).json({ message: "Mentor ID is required" });
+      }
+
+      const FIND_PROFILE = `
+        SELECT
+          u.user_id,
+          u.name,
+          u.email,
+          u.username,
+          u.gender,
+          u.dob,
+          u.graduation_year,
+          u.image_url,
+          m.mentor_id,
+          m.bio
+        FROM Users u
+        JOIN Mentors m ON u.user_id = m.user_id
+        WHERE m.mentor_id = ? AND u.user_type = 'Mentor'
+      `;
+      const [profileRows] = await pool.execute(FIND_PROFILE, [mID]);
+      const profileData = (profileRows as (User & Mentor)[])[0];
+
+      if (!profileData) {
+        return res.status(404).json({ message: "Mentor profile not found" });
+      }
+
+      const FIND_SOCIALS = `
+        SELECT platform, url
+        FROM Mentor_Socials
+        WHERE mentor_id = ?
+      `;
+      const [socialRows] = await pool.execute(FIND_SOCIALS, [mID]);
+      const socialsData = socialRows as MentorSocial[];
+
+      const socials: MentorInfoType["socials"] = {
+        github: "",
+        facebook: "",
+        linkedin: "",
+        twitter: "",
+      };
+      for (const social of socialsData) {
+        if (social.platform === "GitHub") socials.github = social.url || "";
+        if (social.platform === "LinkedIn") socials.linkedin = social.url || "";
+        if (social.platform === "Twitter") socials.twitter = social.url || "";
+        if (social.platform === "Facebook") socials.facebook = social.url || "";
+      }
+
+      const baseUrl = "https://evidently-handy-troll.ngrok-free.app";
+      const image_link = profileData.image_url
+        ? `${baseUrl}/api/mentor/image/${profileData.mentor_id}`
+        : "";
+
+      const mentorInfo: MentorInfoType = {
+        name: profileData.name || "",
+        email: profileData.email || "",
+        username: profileData.username || "",
+        gender: profileData.gender,
+        bio: profileData.bio || "",
+        grad_year: profileData.graduation_year
+          ? profileData.graduation_year.toString()
+          : "",
+        socials,
+        dob: profileData.dob || new Date(0),
+        image_link,
+      };
+
+      res.status(200).json({
+        success: true,
+        data: mentorInfo,
+      });
+    } catch (error) {
+      console.error("Get mentor profile by ID error:", error);
+      res
+        .status(500)
+        .json({ message: "Server error", error: (error as any).message });
+    }
+  }
+
   static async updateMentorProfile(req: AuthenticatedRequest, res: Response) {
     const connection = await pool.getConnection();
     try {
