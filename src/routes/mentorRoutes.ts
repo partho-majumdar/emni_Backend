@@ -8,20 +8,9 @@ import {
 } from "../middleware/auth";
 import { MentorInterestController } from "../controllers/mentor/interestController";
 import { MentorAvailabilityController } from "../controllers/mentor/mentorTimeController";
-import { auth } from "google-auth-library";
-// import { mentorSessionController } from "../controllers/mentor/mentorSessionController";
 
 const router = Router();
 
-// Mentor Auth Routes
-// router.get(
-//   "/image/:mentor_id",
-//   MentorAuthController.getMentorImage as express.RequestHandler
-// );
-// router.get(
-//   "/all",
-//   MentorAuthController.getAllMentors as express.RequestHandler
-// );
 router
   .post("/register", MentorAuthController.register as express.RequestHandler)
   .post("/login", MentorAuthController.login as express.RequestHandler)
@@ -47,11 +36,6 @@ router
     requireMentorOrStudent as express.RequestHandler,
     MentorAuthController.getMentorProfileById as express.RequestHandler
   );
-// router.put(
-//   "/profile/edit",
-//   authenticateToken as express.RequestHandler,
-//   MentorAuthController.updateProfile as express.RequestHandler
-// );
 
 // Interest Routes
 router
@@ -67,11 +51,6 @@ router
     requireMentor as express.RequestHandler,
     MentorInterestController.getMentorInterests as express.RequestHandler
   );
-// router.put(
-//   "/interests/update",
-//   authenticateToken as express.RequestHandler,
-//   updateMentorInterests as express.RequestHandler
-// );
 
 // C.1 Add Availability
 router
