@@ -1,8 +1,12 @@
 import { Request, Response } from "express";
 import pool from "../../config/database";
 
+interface AuthenticatedRequest extends Request {
+  user?: { user_id: string; user_type: string; email?: string };
+}
+
 class MentorAvailabilityController {
-  static async getMentorAvailability(req: Request, res: Response) {
+  static async getMentorAvailability(req: AuthenticatedRequest, res: Response) {
     const { mentorId } = req.params;
 
     if (!mentorId) {
@@ -58,6 +62,46 @@ class MentorAvailabilityController {
         error: "Internal server error",
         details: error.message,
       });
+    }
+  }
+
+  static async getAvailabilityById(req: AuthenticatedRequest, res: Response) {
+    const { availabilityID } = req.params;
+
+    if (!availabilityID) {
+      return res.status(400).json({ message: "Availability ID is required" });
+    }
+
+    try {
+      const GET_AVAILABILITY = `
+        SELECT
+          availability_id, start_time, end_time,
+          is_booked, session_id
+        FROM Mentor_Availability
+        WHERE availability_id = ?
+      `;
+
+      const [rows] = await pool.execute(GET_AVAILABILITY, [availabilityID]);
+      const availabilityData = (rows as any[])[0];
+
+      if (!availabilityData) {
+        return res.status(404).json({ message: "Availability not found" });
+      }
+
+      const availability = {
+        id: availabilityData.availability_id,
+        start: new Date(availabilityData.start_time).toISOString(),
+        end: new Date(availabilityData.end_time).toISOString(),
+        booked: availabilityData.session_id || "",
+      };
+
+      res.status(200).json({
+        success: true,
+        data: availability,
+      });
+    } catch (error) {
+      console.error("Get availability by ID error:", error);
+      res.status(500).json({ message: "Server error" });
     }
   }
 }
