@@ -4,12 +4,12 @@ import {
   authenticateToken,
   requireStudent,
   requireAnyAuthenticated,
+  requireMentorOrStudent,
 } from "../middleware/auth";
 
 import { StudentInterestController } from "../controllers/student/interestController";
 import MentorAvailabilityController from "../controllers/student/studentSeeMentorFreeTime";
 import { StudentSessionController } from "../controllers/student/studentBookOneOnOneSession";
-import { BookGroupSessionController } from "../controllers/student/studentBookGroupSession";
 import { getSuggestedMentorsInterestBased } from "../controllers/student/mentorSuggestionController";
 import { getAllBookedSessions } from "../controllers/student/studentAllBookedSessions";
 
@@ -73,12 +73,19 @@ router
     StudentInterestController.getStudentInterests as express.RequestHandler
   );
 
-router.get(
-  "/mavaliableat/:mentorId",
-  authenticateToken as express.RequestHandler,
-  requireStudent as express.RequestHandler,
-  MentorAvailabilityController.getMentorAvailability as express.RequestHandler
-);
+router
+  .get(
+    "/mavaliableat/:mentorId",
+    authenticateToken as express.RequestHandler,
+    requireStudent as express.RequestHandler,
+    MentorAvailabilityController.getMentorAvailability as express.RequestHandler
+  )
+  .get(
+    "/mavaliableat/aid/:availabilityID",
+    authenticateToken as express.RequestHandler,
+    requireMentorOrStudent as express.RequestHandler,
+    MentorAvailabilityController.getAvailabilityById as express.RequestHandler
+  );
 
 router.get(
   "/booked/:studentID",
