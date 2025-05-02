@@ -90,7 +90,7 @@ export const getSuggestedMentorsInterestBased = async (
         organization: "UIU",
         profile_pic: mentor.image_url
           ? `${baseUrl}/api/mentor/image/${mentor.mentor_id}`
-          : null,
+          : "",
         level: getMentorLevel(sessionsTaken),
         bio: mentor.bio || "",
         sessions_taken: sessionsTaken,
