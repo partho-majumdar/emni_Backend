@@ -5,6 +5,7 @@ const pool = mysql.createPool({
   // host: "host.docker.internal",
   user: "root",
   password: "",
+  // password: "my-secret-pw",
   database: "beforeproject",
   connectionLimit: 10,
   waitForConnections: true,
