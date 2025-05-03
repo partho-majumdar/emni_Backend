@@ -45,18 +45,13 @@ router
   .get(
     "/image/:student_id",
     StudentAuthController.getStudentImage as express.RequestHandler
+  )
+  .get(
+    "/:student_id",
+    authenticateToken as express.RequestHandler,
+    requireMentorOrStudent as express.RequestHandler,
+    StudentAuthController.getStudentProfileById as express.RequestHandler
   );
-
-// router.get(
-//   "/:student_id",
-//   StudentAuthController.getProfile as express.RequestHandler
-// );
-
-// router.put(
-//   "/profile/edit",
-//   authenticateToken as express.RequestHandler,
-//   StudentAuthController.updateProfile as express.RequestHandler
-// );
 
 // Interest-related routes
 router
