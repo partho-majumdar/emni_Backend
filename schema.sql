@@ -101,14 +101,6 @@ CREATE TABLE Mentor_Availability (
     CONSTRAINT fk_mentor_availability_session FOREIGN KEY (session_id) REFERENCES Sessions(session_id) ON DELETE SET NULL
 );
 
-CREATE TABLE Availability_Medium_Details (
-    availability_id CHAR(36) NOT NULL,
-    meeting_link VARCHAR(255) NULL,
-    offline_address TEXT NULL,
-    CONSTRAINT pk_availability_medium_details PRIMARY KEY (availability_id),
-    CONSTRAINT fk_availability_medium_details FOREIGN KEY (availability_id) REFERENCES Mentor_Availability(availability_id) ON DELETE CASCADE,
-);
-
 CREATE TABLE Group_Sessions (
     group_session_id CHAR(36) DEFAULT (UUID()) NOT NULL,
     mentor_id CHAR(36) NOT NULL,
@@ -140,6 +132,7 @@ CREATE TABLE One_On_One_Sessions (
     availability_id CHAR(36) NOT NULL,
     student_id CHAR(36) NOT NULL,
     medium ENUM('online', 'offline') NOT NULL,
+    place VARCHAR(255) DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT pk_one_on_one_sessions PRIMARY KEY (one_on_one_session_id),
     CONSTRAINT fk_one_on_one_sessions_availability FOREIGN KEY (availability_id) REFERENCES Mentor_Availability(availability_id) ON DELETE CASCADE,
@@ -148,3 +141,89 @@ CREATE TABLE One_On_One_Sessions (
 );
 
 
+
+---------------------------------------------------------------------------------------------------------------
+
+CREATE TABLE Reviews (
+    review_id CHAR(36) DEFAULT (UUID()) NOT NULL,
+    reviewer_id CHAR(36) NOT NULL,
+    review_text TEXT NULL,
+    rating INT NOT NULL CHECK (rating BETWEEN 1 AND 5),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    CONSTRAINT pk_reviews PRIMARY KEY (review_id),
+    CONSTRAINT fk_reviews_reviewer FOREIGN KEY (reviewer_id) REFERENCES Students(student_id) ON DELETE CASCADE
+);
+
+-- For 1:1 session reviews
+CREATE TABLE One_On_One_Reviews (
+    review_id CHAR(36) NOT NULL,
+    one_on_one_session_id CHAR(36) NOT NULL,
+    CONSTRAINT pk_one_on_one_reviews PRIMARY KEY (review_id),
+    CONSTRAINT fk_one_on_one_reviews_review FOREIGN KEY (review_id) REFERENCES Reviews(review_id) ON DELETE CASCADE,
+    CONSTRAINT fk_one_on_one_reviews_session FOREIGN KEY (one_on_one_session_id) REFERENCES One_On_One_Sessions(one_on_one_session_id) ON DELETE CASCADE,
+    CONSTRAINT uq_one_on_one_session_review UNIQUE (one_on_one_session_id)
+);
+
+-- For group session reviews
+CREATE TABLE Group_Session_Reviews (
+    review_id CHAR(36) NOT NULL,
+    group_session_id CHAR(36) NOT NULL,
+    CONSTRAINT pk_group_session_reviews PRIMARY KEY (review_id),
+    CONSTRAINT fk_group_session_reviews_review FOREIGN KEY (review_id) REFERENCES Reviews(review_id) ON DELETE CASCADE,
+    CONSTRAINT fk_group_session_reviews_session FOREIGN KEY (group_session_id) REFERENCES Group_Sessions(group_session_id) ON DELETE CASCADE,
+    CONSTRAINT uq_group_session_student_review UNIQUE (group_session_id, reviewer_id)
+);
+
+-- 1. User Wallet Table --
+CREATE TABLE User_Wallets (
+    wallet_id CHAR(36) DEFAULT (UUID()) NOT NULL,
+    user_id CHAR(36) NOT NULL UNIQUE,
+    ucoin_balance DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT pk_wallet_id PRIMARY KEY (wallet_id),
+    CONSTRAINT fk_wallet_user FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE,
+    CONSTRAINT chk_positive_balance CHECK (ucoin_balance >= 0)
+);
+
+-- UCOIN Recharge 
+
+-- UCOIN Transaction
+CREATE TABLE UCOIN_Transactions (
+    transaction_id CHAR(36) DEFAULT (UUID()),
+    wallet_id CHAR(36) NOT NULL,
+    session_id CHAR(36) NOT NULL,
+    amount DECIMAL(12,2) NOT NULL,
+    transaction_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    status ENUM('PENDING', 'COMPLETED', 'FAILED', 'REFUNDED') DEFAULT 'COMPLETED',
+    CONSTRAINT pk_ucoin_transactions PRIMARY KEY (transaction_id),
+    CONSTRAINT fk_transaction_wallet FOREIGN KEY (wallet_id) REFERENCES User_Wallets(wallet_id),
+    CONSTRAINT fk_transaction_session FOREIGN KEY (session_id) REFERENCES One_On_One_Sessions(one_on_one_session_id),
+    CONSTRAINT chk_positive_amount CHECK (amount > 0),
+    CONSTRAINT chk_valid_balance CHECK (balance_after >= 0)
+);
+
+-- Blog/Project Showcase 
+CREATE TABLE Posts (
+    post_id CHAR(36) DEFAULT (UUID()) NOT NULL,
+    user_id CHAR(36) NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    content TEXT NOT NULL,
+    post_type ENUM('Blog', 'Project') NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    CONSTRAINT pk_posts PRIMARY KEY (post_id),
+    CONSTRAINT fk_posts_user FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE
+);
+
+-- Comments 
+CREATE TABLE Comments (
+    comment_id CHAR(36) DEFAULT (UUID()) NOT NULL,
+    post_id CHAR(36) NOT NULL,
+    user_id CHAR(36) NOT NULL,
+    parent_comment_id CHAR(36) NULL, 
+    content TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    CONSTRAINT pk_comments PRIMARY KEY (comment_id),
+    CONSTRAINT fk_comments_post FOREIGN KEY (post_id) REFERENCES Posts(post_id) ON DELETE CASCADE,
+    CONSTRAINT fk_comments_user FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE,
+    CONSTRAINT fk_comments_parent FOREIGN KEY (parent_comment_id) REFERENCES Comments(comment_id) ON DELETE SET NULL
+);
