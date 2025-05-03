@@ -6,6 +6,7 @@ import {
   requireStudent,
 } from "../middleware/auth";
 import { oneOnOneSessionController } from "../controllers/mentor/oneOnOneSessionController";
+import { StudentSessionController } from "../controllers/student/studentBookOneOnOneSession";
 
 const router = Router();
 
@@ -33,7 +34,7 @@ router.post(
   oneOnOneSessionController.createSession as express.RequestHandler
 );
 
-// A.4 Update Session (implied)
+// A.4 Update Session
 router.put(
   "/:sessionId",
   authenticateToken as express.RequestHandler,
@@ -41,7 +42,7 @@ router.put(
   oneOnOneSessionController.updateSession as express.RequestHandler
 );
 
-// A.5 Delete Session (implied)
+// A.5 Delete Session
 router.delete(
   "/:sessionId",
   authenticateToken as express.RequestHandler,
@@ -64,5 +65,19 @@ router.get(
   requireStudent as express.RequestHandler,
   oneOnOneSessionController.getNonInterestBasedSessionsForStudent as express.RequestHandler
 );
+
+router
+  .put(
+    "/booked/update/:sessionId",
+    authenticateToken as express.RequestHandler,
+    requireMentor as express.RequestHandler,
+    StudentSessionController.mentorUpdateSessionPlace as express.RequestHandler
+  )
+  .get(
+    "/booked/:bookedId",
+    authenticateToken as express.RequestHandler,
+    requireMentor as express.RequestHandler,
+    StudentSessionController.getBookedSessionBySessionID as express.RequestHandler
+  );
 
 export default router;
