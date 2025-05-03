@@ -1,22 +1,19 @@
-import { Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import db from "../../config/database";
 import { RowDataPacket } from "mysql2";
 import crypto from "crypto";
 import cron from "node-cron";
 
-// Interface for request body
 interface BookSessionRequest {
   AvailabilityID: string;
   medium: "online" | "offline";
 }
 
-// Define JwtPayload for JWT authentication
 interface JwtPayload {
   user_id: string;
   user_type?: string;
 }
 
-// Extend Request for type safety
 interface AuthenticatedRequest extends Request {
   user?: JwtPayload;
 }
@@ -25,10 +22,7 @@ export class StudentSessionController {
   static async bookSession(req: AuthenticatedRequest, res: Response) {
     const userId = req.user?.user_id;
     const sessionId = req.params.sessionID;
-    const { AvailabilityID, medium } = req.body as {
-      AvailabilityID: string;
-      medium: "online" | "offline";
-    };
+    const { AvailabilityID, medium } = req.body as BookSessionRequest;
 
     if (!userId) {
       console.log("Unauthorized: No user ID in JWT token");
@@ -96,7 +90,6 @@ export class StudentSessionController {
 
       console.log("Session and availability check result:", sessionRows);
       if (sessionRows.length === 0) {
-        // Debug why the query failed
         const [sessionCheck] = await db.query<RowDataPacket[]>(
           "SELECT session_id, mentor_id FROM Sessions WHERE session_id = ?",
           [sessionId]
@@ -223,6 +216,111 @@ export class StudentSessionController {
         message: "Server error",
         error: error.message,
       });
+    }
+  }
+
+  static async mentorUpdateSessionPlace(
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const mentorUserId = req.user?.user_id;
+      const sessionId = req.params.sessionId;
+      const { place } = req.body as { place: string };
+
+      if (!mentorUserId) {
+        res.status(401).json({ success: false, message: "Unauthorized" });
+        return;
+      }
+
+      if (!sessionId || !place) {
+        res.status(400).json({
+          success: false,
+          message: "Session ID and place are required",
+        });
+        return;
+      }
+
+      // Verify mentor owns this session
+      const [session] = await db.query<RowDataPacket[]>(
+        `SELECT oos.one_on_one_session_id 
+         FROM One_On_One_Sessions oos
+         JOIN Mentor_Availability ma ON oos.availability_id = ma.availability_id
+         JOIN Mentors m ON ma.mentor_id = m.mentor_id
+         WHERE oos.one_on_one_session_id = ? 
+         AND m.user_id = ?`,
+        [sessionId, mentorUserId]
+      );
+
+      if (session.length === 0) {
+        res.status(404).json({
+          success: false,
+          message: "Session not found or you don't have permission",
+        });
+        return;
+      }
+
+      // Update place
+      await db.query(
+        `UPDATE One_On_One_Sessions 
+         SET place = ?
+         WHERE one_on_one_session_id = ?`,
+        [place, sessionId]
+      );
+
+      res.status(200).json({
+        success: true,
+        // message: "Session location updated successfully",
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async getBookedSessionBySessionID(
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const bookedId = req.params.bookedId;
+
+      if (!bookedId) {
+        res.status(400).json({
+          success: false,
+          message: "Booked session ID is required",
+        });
+        return;
+      }
+
+      // Get session details
+      const [session] = await db.query<RowDataPacket[]>(
+        `SELECT 
+          student_id,
+          availability_id
+         FROM One_On_One_Sessions
+         WHERE one_on_one_session_id = ?`,
+        [bookedId]
+      );
+
+      if (session.length === 0) {
+        res.status(404).json({
+          success: false,
+          message: "Session not found",
+        });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        data: {
+          studentId: session[0].student_id,
+          availabilityId: session[0].availability_id,
+        },
+      });
+    } catch (error) {
+      next(error);
     }
   }
 
