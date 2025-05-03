@@ -426,6 +426,70 @@ export class StudentAuthController {
     }
   }
 
+  static async getStudentProfileById(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { student_id } = req.params;
+
+      if (!student_id) {
+        return res.status(400).json({ message: "Student ID is required" });
+      }
+
+      const FIND_PROFILE_BY_ID = `
+      SELECT 
+        u.user_id,
+        u.name,
+        u.email,
+        u.username,
+        u.gender,
+        u.dob,
+        u.graduation_year,
+        u.image_url,
+        s.student_id,
+        s.bio
+      FROM Users u
+      JOIN Students s ON u.user_id = s.user_id
+      WHERE s.student_id = ? AND u.user_type = 'Student'
+    `;
+
+      const [profileRows] = await pool.execute(FIND_PROFILE_BY_ID, [
+        student_id,
+      ]);
+      const profileData = (profileRows as any)[0];
+
+      if (!profileData) {
+        return res.status(404).json({ message: "Student profile not found" });
+      }
+
+      const baseUrl = "https://evidently-handy-troll.ngrok-free.app";
+      const image_link = profileData.image_url
+        ? `${baseUrl}/api/student/image/${profileData.student_id}`
+        : "";
+
+      const studentInfo = {
+        name: profileData.name || "",
+        email: profileData.email || "",
+        username: profileData.username || "",
+        gender: profileData.gender,
+        grad_year: profileData.graduation_year
+          ? profileData.graduation_year.toString()
+          : "",
+        dob: profileData.dob || new Date(0),
+        image_link,
+        bio: profileData.bio || "",
+      };
+
+      res.status(200).json({
+        success: true,
+        data: studentInfo,
+      });
+    } catch (error) {
+      console.error("Get student profile by ID error:", error);
+      res
+        .status(500)
+        .json({ message: "Server error", error: (error as any).message });
+    }
+  }
+
   static async getStudentImage(req: AuthenticatedRequest, res: Response) {
     try {
       const { student_id } = req.params;
