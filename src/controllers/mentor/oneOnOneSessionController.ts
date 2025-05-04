@@ -345,7 +345,7 @@ export class oneOnOneSessionController {
     try {
       await connection.beginTransaction();
 
-      // Check if user is a mentor and owns the session
+      // 1. Verify mentor owns the session
       const [mentorRows] = await connection.execute(
         `SELECT m.mentor_id
          FROM Mentors m
@@ -353,19 +353,37 @@ export class oneOnOneSessionController {
          WHERE m.user_id = ? AND s.session_id = ?`,
         [user_id, sessionId]
       );
-      const mentor = (mentorRows as any[])[0];
-      if (!mentor) {
+
+      if ((mentorRows as any[]).length === 0) {
         await connection.rollback();
         return res.status(403).json({
           message: "Unauthorized: Only the session's mentor can delete it",
         });
       }
 
-      const DELETE_SESSION = `
-        DELETE FROM Sessions
-        WHERE session_id = ?
-      `;
-      const [result] = await connection.execute(DELETE_SESSION, [sessionId]);
+      // 2. Delete all One_On_One_Sessions records for this session
+      await connection.execute(
+        `DELETE o FROM One_On_One_Sessions o
+         JOIN Mentor_Availability a ON o.availability_id = a.availability_id
+         WHERE a.session_id = ?`,
+        [sessionId]
+      );
+
+      // 3. Reset availability slots (set is_booked = 0 and clear session_id)
+      await connection.execute(
+        `UPDATE Mentor_Availability 
+         SET is_booked = 0,
+             session_id = NULL,
+             status = 'Upcoming'
+         WHERE session_id = ?`,
+        [sessionId]
+      );
+
+      // 4. Delete the session itself
+      const [result] = await connection.execute(
+        `DELETE FROM Sessions WHERE session_id = ?`,
+        [sessionId]
+      );
 
       if ((result as any).affectedRows === 0) {
         await connection.rollback();
@@ -375,7 +393,7 @@ export class oneOnOneSessionController {
       await connection.commit();
       res.status(200).json({
         success: true,
-        message: "Session deleted successfully",
+        message: "Session deleted and time slots made available again",
         sessionId,
       });
     } catch (error) {
