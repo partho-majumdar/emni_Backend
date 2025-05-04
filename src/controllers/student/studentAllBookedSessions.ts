@@ -6,49 +6,50 @@ interface BookedSession {
   start: Date;
   end: Date;
   session_type: "1:1" | "group";
-  sessionId: number;
+  sessionId: string;
   medium: string;
 }
 
 interface OneOnOneSession extends RowDataPacket {
   start: Date;
   end: Date;
-  sessionId: number;
+  sessionId: string;
   medium: string;
 }
 
 interface GroupSession extends RowDataPacket {
   start: Date;
   end: Date;
-  sessionId: number;
+  sessionId: string;
 }
 
 export const getAllBookedSessions = async (req: Request, res: Response) => {
   const { studentID } = req.params;
 
   try {
-    // 1. Get 1:1 sessions
+    // 1. Get 1:1 sessions with session_id from Sessions table
     const [oneOnOneSessions] = await db.query<OneOnOneSession[]>(
       `
       SELECT 
         ma.start_time AS start,
         ma.end_time AS end,
-        oos.one_on_one_session_id AS sessionId,
+        s.session_id AS sessionId,
         oos.medium
       FROM One_On_One_Sessions oos
       JOIN Mentor_Availability ma ON oos.availability_id = ma.availability_id
+      JOIN Sessions s ON ma.session_id = s.session_id
       WHERE oos.student_id = ?
       `,
       [studentID]
     );
 
-    // 2. Get Group Sessions
+    // 2. Get Group Sessions with group_session_id from Group_Sessions table
     const [groupSessions] = await db.query<GroupSession[]>(
       `
       SELECT 
         gs.session_date AS start,
         DATE_ADD(gs.session_date, INTERVAL gs.duration_mins MINUTE) AS end,
-        gsp.group_session_id AS sessionId
+        gs.group_session_id AS sessionId
       FROM Group_Session_Participants gsp
       JOIN Group_Sessions gs ON gsp.group_session_id = gs.group_session_id
       WHERE gsp.student_id = ? 
