@@ -81,7 +81,7 @@ router
     StudentSessionController.getBookedSessionBySessionID as express.RequestHandler
   );
 
-// 1:1 Booed Session Link
+// 1:1 Booked Session Link
 router
   .put(
     "/link/update/:oneOnOneSessionId",
@@ -96,4 +96,4 @@ router
     OneOnOneSessionLinkController.getSessionLink as express.RequestHandler
   );
 
-export default r
+export default router;
