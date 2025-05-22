@@ -140,7 +140,11 @@ CREATE TABLE One_On_One_Sessions (
     CONSTRAINT uq_one_on_one_sessions UNIQUE (availability_id, student_id)
 );
 
-
+CREATE TABLE BookedSessionLinks(
+  one_on_one_session_id CHAR(36) DEFAULT (UUID()) NOT NULL,
+  link VARCHAR(255) NOT NULL,
+  CONSTRAINT fk_one_on_one_session_id FOREIGN KEY (one_on_one_session_id) REFERENCES One_On_One_Session (one_on_one_session_id) ON DELETE CASCADE
+);
 
 ---------------------------------------------------------------------------------------------------------------
 
