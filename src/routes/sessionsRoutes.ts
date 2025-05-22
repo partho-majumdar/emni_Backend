@@ -7,6 +7,7 @@ import {
 } from "../middleware/auth";
 import { oneOnOneSessionController } from "../controllers/mentor/oneOnOneSessionController";
 import { StudentSessionController } from "../controllers/student/studentBookOneOnOneSession";
+import OneOnOneSessionLinkController from "../controllers/mentor/oneOnOneSessionLinkController";
 
 const router = Router();
 
@@ -80,4 +81,19 @@ router
     StudentSessionController.getBookedSessionBySessionID as express.RequestHandler
   );
 
-export default router;
+// 1:1 Booed Session Link
+router
+  .put(
+    "/link/update/:oneOnOneSessionId",
+    authenticateToken as express.RequestHandler,
+    requireMentor as express.RequestHandler,
+    OneOnOneSessionLinkController.updateSessionLink as express.RequestHandler
+  )
+  .get(
+    "/link/:oneOnOneSessionId",
+    authenticateToken as express.RequestHandler,
+    requireMentorOrStudent as express.RequestHandler,
+    OneOnOneSessionLinkController.getSessionLink as express.RequestHandler
+  );
+
+export default r
