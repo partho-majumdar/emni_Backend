@@ -36,18 +36,23 @@ class OneOnOneSessionLinkController {
         [oneOnOneSessionId]
       );
 
-      if (linkRows.length === 0) {
-        res.status(404).json({
+      if (linkRows.length === 0 || linkRows[0].link === "") {
+        res.status(200).json({
           success: false,
-          message: "No link found for this session",
-          data: { one_oneSessionId: oneOnOneSessionId, link: "" },
+          data: {
+            one_oneSessionId: oneOnOneSessionId,
+            link: "",
+          },
         });
         return;
       }
 
       res.status(200).json({
         success: true,
-        data: { one_oneSessionId: oneOnOneSessionId, link: linkRows[0].link },
+        data: {
+          one_oneSessionId: oneOnOneSessionId,
+          link: linkRows[0].link,
+        },
       });
     } catch (error: any) {
       console.error("Error retrieving session link:", error);
