@@ -25,7 +25,6 @@ interface Mentor {
   mentor_id: string;
   user_id: string;
   bio: string | null;
-  is_approved: boolean;
 }
 
 interface MentorSocial {
@@ -163,14 +162,13 @@ export class MentorAuthController {
         ]);
 
         const CREATE_MENTOR = `
-          INSERT INTO Mentors (mentor_id, user_id, bio, is_approved)
-          VALUES (?, ?, ?, ?)
+          INSERT INTO Mentors (mentor_id, user_id, bio)
+          VALUES (?, ?, ?)
         `;
         await connection.execute(CREATE_MENTOR, [
           mentor_id,
           user_id,
           bio || null,
-          false,
         ]);
 
         const CREATE_SOCIAL = `
@@ -253,22 +251,13 @@ export class MentorAuthController {
       }
 
       const FIND_MENTOR = `
-        SELECT mentor_id, is_approved FROM Mentors WHERE user_id = ?
+        SELECT mentor_id FROM Mentors WHERE user_id = ?
       `;
       const [mentorRows] = await pool.execute(FIND_MENTOR, [user.user_id]);
-      const mentor = (
-        mentorRows as { mentor_id: string; is_approved: boolean }[]
-      )[0];
+      const mentor = (mentorRows as { mentor_id: string }[])[0];
 
       if (!mentor) {
         return res.status(404).json({ message: "Mentor profile not found" });
-      }
-
-      if (!mentor.is_approved) {
-        return res.status(403).json({
-          message:
-            "Your account is pending approval. Please wait for admin approval.",
-        });
       }
 
       const token = jwt.sign(
@@ -384,7 +373,7 @@ export class MentorAuthController {
       }
 
       const baseUrl = "https://evidently-handy-troll.ngrok-free.app";
-      // const baseUrl = "http://localhost:5000";
+      // const baseUrl = "http://localhost:3000";
       const image_link = profileData.image_url
         ? `${baseUrl}/api/mentor/image/${profileData.mentor_id}`
         : "";
@@ -468,6 +457,7 @@ export class MentorAuthController {
       }
 
       const baseUrl = "https://evidently-handy-troll.ngrok-free.app";
+      // const baseUrl = "http://localhost:3000";
       const image_link = profileData.image_url
         ? `${baseUrl}/api/mentor/image/${profileData.mentor_id}`
         : "";
