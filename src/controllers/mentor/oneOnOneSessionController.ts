@@ -163,8 +163,8 @@ export class oneOnOneSessionController {
 
       await connection.commit();
 
-      const baseUrl = "https://evidently-handy-troll.ngrok-free.app";
-      // const baseUrl = "http://localhost:5000";
+      // const baseUrl = "https://evidently-handy-troll.ngrok-free.app";
+      const baseUrl = "http://localhost:3000";
       const mentorImageLink = mentorDetails.image_url
         ? `${baseUrl}/api/mentor/image/${mentor_id}`
         : "";
@@ -454,8 +454,8 @@ export class oneOnOneSessionController {
         if (row.is_online) session_medium.push("online");
         if (row.is_offline) session_medium.push("offline");
 
-        const baseUrl = "https://evidently-handy-troll.ngrok-free.app";
-        // const baseUrl = "http://localhost:5000";
+        // const baseUrl = "https://evidently-handy-troll.ngrok-free.app";
+        const baseUrl = "http://localhost:3000";
         const mentorImageLink = row.image_url
           ? `${baseUrl}/api/mentor/image/${row.mentor_id}`
           : "";
@@ -530,8 +530,8 @@ export class oneOnOneSessionController {
       if (sessionData.is_online) session_medium.push("online");
       if (sessionData.is_offline) session_medium.push("offline");
 
-      const baseUrl = "https://evidently-handy-troll.ngrok-free.app";
-      // const baseUrl = "http://localhost:5000";
+      // const baseUrl = "https://evidently-handy-troll.ngrok-free.app";
+      const baseUrl = "http://localhost:3000";
       const mentorImageLink = sessionData.image_url
         ? `${baseUrl}/api/mentor/image/${sessionData.mentor_id}`
         : "";
@@ -635,8 +635,8 @@ export class oneOnOneSessionController {
         if (row.is_online) session_medium.push("online");
         if (row.is_offline) session_medium.push("offline");
 
-        const baseUrl = "https://evidently-handy-troll.ngrok-free.app";
-        // const baseUrl = "http://localhost:5000";
+        // const baseUrl = "https://evidently-handy-troll.ngrok-free.app";
+        const baseUrl = "http://localhost:3000";
         const mentorImageLink = row.mentorImage
           ? `${baseUrl}/api/mentor/image/${row.mentorId}`
           : "";
@@ -701,8 +701,8 @@ export class oneOnOneSessionController {
       );
 
       let sessions;
-      const baseUrl = "https://evidently-handy-troll.ngrok-free.app";
-      // const baseUrl = "http://localhost:5000";
+      // const baseUrl = "https://evidently-handy-troll.ngrok-free.app";
+      const baseUrl = "http://localhost:3000";
 
       if (!Array.isArray(interestRows) || interestRows.length === 0) {
         const [allSessionRows] = await connection.execute(

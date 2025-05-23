@@ -362,8 +362,8 @@ export class BookGroupSessionController {
       );
       console.log("Participants fetched:", participantRows);
 
-      const baseUrl = "https://evidently-handy-troll.ngrok-free.app";
-      // const baseUrl = "http://localhost:5000";
+      // const baseUrl = "https://evidently-handy-troll.ngrok-free.app";
+      const baseUrl = "http://localhost:3000";
 
       const participants: GroupSessionParticipantInfo[] = participantRows.map(
         (row) => ({
@@ -374,8 +374,8 @@ export class BookGroupSessionController {
             : "",
           joinedAt: new Date(row.joinedAt).toISOString(),
           status: row.status,
-          points: Math.floor(Math.random() * 100), 
-          email: row.email, 
+          points: Math.floor(Math.random() * 100),
+          email: row.email,
         })
       );
 

@@ -395,8 +395,8 @@ export class StudentAuthController {
         return res.status(404).json({ message: "Student profile not found" });
       }
 
-      const baseUrl = "https://evidently-handy-troll.ngrok-free.app";
-      // const baseUrl = "http://localhost:5000";
+      // const baseUrl = "https://evidently-handy-troll.ngrok-free.app";
+      const baseUrl = "http://localhost:3000";
       const image_link = profileData.image_url
         ? `${baseUrl}/api/student/image/${profileData.student_id}`
         : "";
@@ -460,7 +460,8 @@ export class StudentAuthController {
         return res.status(404).json({ message: "Student profile not found" });
       }
 
-      const baseUrl = "https://evidently-handy-troll.ngrok-free.app";
+      // const baseUrl = "https://evidently-handy-troll.ngrok-free.app";
+      const baseUrl = "http://localhost:3000";
       const image_link = profileData.image_url
         ? `${baseUrl}/api/student/image/${profileData.student_id}`
         : "";
