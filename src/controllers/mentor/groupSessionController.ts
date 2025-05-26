@@ -312,31 +312,31 @@ class GroupSessionController {
     }
   }
 
-  static async updateGroupSessionStatuses() {
-    try {
-      await pool.query("START TRANSACTION");
+  // static async updateGroupSessionStatuses() {
+  //   try {
+  //     await pool.query("START TRANSACTION");
 
-      await pool.query(
-        `UPDATE Group_Sessions
-         SET status = 'Ongoing'
-         WHERE status = 'Upcoming'
-         AND NOW() BETWEEN session_date AND DATE_ADD(session_date, INTERVAL duration_mins MINUTE)`
-      );
+  //     await pool.query(
+  //       `UPDATE Group_Sessions
+  //        SET status = 'Ongoing'
+  //        WHERE status = 'Upcoming'
+  //        AND NOW() BETWEEN session_date AND DATE_ADD(session_date, INTERVAL duration_mins MINUTE)`
+  //     );
 
-      await pool.query(
-        `UPDATE Group_Sessions
-         SET status = 'Completed'
-         WHERE status IN ('Upcoming', 'Ongoing')
-         AND NOW() > DATE_ADD(session_date, INTERVAL duration_mins MINUTE)`
-      );
+  //     await pool.query(
+  //       `UPDATE Group_Sessions
+  //        SET status = 'Completed'
+  //        WHERE status IN ('Upcoming', 'Ongoing')
+  //        AND NOW() > DATE_ADD(session_date, INTERVAL duration_mins MINUTE)`
+  //     );
 
-      await pool.query("COMMIT");
-      return { success: true, message: "Group Session Statuses updated" };
-    } catch (error: any) {
-      await pool.query("ROLLBACK");
-      return { success: false, message: error.message };
-    }
-  }
+  //     await pool.query("COMMIT");
+  //     return { success: true, message: "Group Session Statuses updated" };
+  //   } catch (error: any) {
+  //     await pool.query("ROLLBACK");
+  //     return { success: false, message: error.message };
+  //   }
+  // }
 
   static async getGroupSessionsByMentorId(
     req: Request,
@@ -762,14 +762,14 @@ class GroupSessionController {
   }
 }
 
-cron.schedule("*/10 * * * *", async () => {
-  console.log("Running Group Session Status update...");
-  try {
-    const result = await GroupSessionController.updateGroupSessionStatuses();
-    console.log("Group Session Status update result:", result);
-  } catch (error) {
-    console.error("Error in status update:", error);
-  }
-});
+// cron.schedule("*/1 * * * *", async () => {
+//   console.log("Running Group Session Status update...");
+//   try {
+//     const result = await GroupSessionController.updateGroupSessionStatuses();
+//     console.log("Group Session Status update result:", result);
+//   } catch (error) {
+//     console.error("Error in status update:", error);
+//   }
+// });
 
 export default GroupSessionController;

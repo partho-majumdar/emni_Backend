@@ -5,9 +5,8 @@ file_structure.txt
 schema6.sql
 .env
 uploads 
-rafi_updated_schema.sql
 old_mentorTimeController.ts
-myschema.sql 
 init.sql 
-
+test_schema.sql
+ument_db.sql 
 

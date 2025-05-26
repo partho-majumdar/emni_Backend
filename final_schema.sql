@@ -26,7 +26,6 @@ CREATE TABLE Mentors (
     mentor_id CHAR(36) DEFAULT (UUID()) NOT NULL,
     user_id CHAR(36) NOT NULL,
     bio TEXT NULL,
-    is_approved BOOLEAN DEFAULT FALSE NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
     CONSTRAINT pk_mentors PRIMARY KEY (mentor_id),
     CONSTRAINT fk_mentors_user FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE
@@ -143,8 +142,18 @@ CREATE TABLE One_On_One_Sessions (
 CREATE TABLE BookedSessionLinks(
   one_on_one_session_id CHAR(36) DEFAULT (UUID()) NOT NULL,
   link VARCHAR(255) NOT NULL,
-  CONSTRAINT fk_one_on_one_session_id FOREIGN KEY (one_on_one_session_id) REFERENCES One_On_One_Session (one_on_one_session_id) ON DELETE CASCADE
+  CONSTRAINT fk_one_on_one_session_id FOREIGN KEY (one_on_one_session_id) REFERENCES One_On_One_Sessions (one_on_one_session_id) ON DELETE CASCADE
 );
+
+--------------------------------
+
+
+
+
+
+
+
+
 
 ---------------------------------------------------------------------------------------------------------------
 

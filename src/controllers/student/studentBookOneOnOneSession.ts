@@ -324,56 +324,56 @@ export class StudentSessionController {
     }
   }
 
-  static async updateSessionStatuses() {
-    try {
-      await db.query("START TRANSACTION");
+  // static async updateSessionStatuses() {
+  //   try {
+  //     await db.query("START TRANSACTION");
 
-      // Update Ongoing sessions
-      await db.query(
-        `UPDATE Mentor_Availability
-         SET status = 'Ongoing'
-         WHERE is_booked = TRUE
-           AND status = 'Upcoming'
-           AND start_time <= NOW()
-           AND end_time >= NOW()`
-      );
+  //     // Update Ongoing sessions
+  //     await db.query(
+  //       `UPDATE Mentor_Availability
+  //        SET status = 'Ongoing'
+  //        WHERE is_booked = TRUE
+  //          AND status = 'Upcoming'
+  //          AND start_time <= NOW()
+  //          AND end_time >= NOW()`
+  //     );
 
-      // Update Completed sessions
-      await db.query(
-        `UPDATE Mentor_Availability
-         SET status = 'Completed'
-         WHERE is_booked = TRUE
-           AND status IN ('Upcoming', 'Ongoing')
-           AND end_time < NOW()`
-      );
+  //     // Update Completed sessions
+  //     await db.query(
+  //       `UPDATE Mentor_Availability
+  //        SET status = 'Completed'
+  //        WHERE is_booked = TRUE
+  //          AND status IN ('Upcoming', 'Ongoing')
+  //          AND end_time < NOW()`
+  //     );
 
-      // Update Cancelled sessions
-      await db.query(
-        `UPDATE Mentor_Availability
-         SET status = 'Cancelled'
-         WHERE is_booked = FALSE
-           AND status = 'Upcoming'
-           AND end_time < NOW()`
-      );
+  //     // Update Cancelled sessions
+  //     await db.query(
+  //       `UPDATE Mentor_Availability
+  //        SET status = 'Cancelled'
+  //        WHERE is_booked = FALSE
+  //          AND status = 'Upcoming'
+  //          AND end_time < NOW()`
+  //     );
 
-      await db.query("COMMIT");
-      console.log("1:1 Session statuses updated successfully");
-      return { success: true, message: "1:1 Session statuses updated" };
-    } catch (error: any) {
-      await db.query("ROLLBACK");
-      console.error("Error updating session statuses:", error);
-      return { success: false, message: error.message };
-    }
-  }
+  //     await db.query("COMMIT");
+  //     console.log("1:1 Session statuses updated successfully");
+  //     return { success: true, message: "1:1 Session statuses updated" };
+  //   } catch (error: any) {
+  //     await db.query("ROLLBACK");
+  //     console.error("Error updating session statuses:", error);
+  //     return { success: false, message: error.message };
+  //   }
+  // }
 }
 
 // Cron job for status updates (runs every 10 minutes)
-cron.schedule("*/10 * * * *", async () => {
-  console.log("Running 1:1 session status update...");
-  try {
-    const result = await StudentSessionController.updateSessionStatuses();
-    console.log("1:1 Session Status update result:", result);
-  } catch (error) {
-    console.error("Error in scheduled status update:", error);
-  }
-});
+// cron.schedule("*/1 * * * *", async () => {
+//   console.log("Running 1:1 session status update...");
+//   try {
+//     const result = await StudentSessionController.updateSessionStatuses();
+//     console.log("1:1 Session Status update result:", result);
+//   } catch (error) {
+//     console.error("Error in scheduled status update:", error);
+//   }
+// });

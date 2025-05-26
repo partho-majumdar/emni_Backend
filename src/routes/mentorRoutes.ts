@@ -71,6 +71,12 @@ router
     authenticateToken as express.RequestHandler,
     requireMentor as express.RequestHandler,
     MentorAvailabilityController.deleteAvailability as express.RequestHandler
+  )
+  .put(
+    "/availability/:availability_id",
+    authenticateToken as express.RequestHandler,
+    requireMentor as express.RequestHandler,
+    MentorAvailabilityController.updateAvailability as express.RequestHandler
   );
 
 // C.3 Get Closest Booked Session
