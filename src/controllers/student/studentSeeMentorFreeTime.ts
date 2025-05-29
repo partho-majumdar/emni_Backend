@@ -25,28 +25,53 @@ class MentorAvailabilityController {
     }
 
     try {
-      const [availabilitySlots]: any[] = await pool.query(
-        `SELECT 
-          availability_id as id,
-          start_time as start,
-          end_time as end,
-          is_booked,
-          COALESCE(session_id, '') as session_id
-        FROM Mentor_Availability
-        WHERE mentor_id = ?
-          AND start_time > NOW()
-        ORDER BY start_time`,
+      const [mentorCheck]: any[] = await pool.query(
+        `SELECT mentor_id FROM Mentors WHERE mentor_id = ?`,
         [mentorId]
       );
 
-      if (!Array.isArray(availabilitySlots) || availabilitySlots.length === 0) {
-        return res.status(200).json({
-          message: "No available time slots found for this mentor",
-          availability: [],
+      if (mentorCheck.length === 0) {
+        return res.status(404).json({
+          message: "Mentor not found",
         });
       }
 
-      // Format the response
+      const [availabilitySlots]: any[] = await pool.query(
+        `SELECT 
+        availability_id as id,
+        start_time as start,
+        end_time as end,
+        is_booked,
+        COALESCE(session_id, '') as session_id,
+        is_online,
+        is_offline
+      FROM Mentor_Availability
+      WHERE mentor_id = ?
+        AND start_time > UTC_TIMESTAMP()
+      ORDER BY start_time`,
+        [mentorId]
+      );
+
+      if (availabilitySlots.length === 0) {
+        const [allSlots]: any[] = await pool.query(
+          `SELECT COUNT(*) as count FROM Mentor_Availability WHERE mentor_id = ?`,
+          [mentorId]
+        );
+
+        if (allSlots[0].count === 0) {
+          return res.status(200).json({
+            message: "This mentor has not set up any availability slots",
+            availability: [],
+          });
+        } else {
+          return res.status(200).json({
+            message:
+              "No upcoming availability slots found (all may be in the past)",
+            availability: [],
+          });
+        }
+      }
+
       const formattedAvailability = availabilitySlots.map((slot: any) => {
         const start = new Date(slot.start);
         const end = new Date(slot.end);
@@ -56,14 +81,25 @@ class MentorAvailabilityController {
           throw new Error("Invalid date format in database");
         }
 
+        const medium = [];
+        if (slot.is_online) medium.push("online");
+        if (slot.is_offline) medium.push("offline");
+
         return {
           id: slot.id,
           start: start.toISOString(),
           end: end.toISOString(),
-          booked: slot.is_booked ? slot.session_id : "",
+          booked: slot.is_booked ? [slot.session_id] : [], 
+          medium: medium.length ? medium : ["online"], 
         };
       });
 
+      console.log(
+        "Formatted availability for mentor",
+        mentorId,
+        ":",
+        formattedAvailability
+      );
       res.status(200).json(formattedAvailability);
     } catch (error: any) {
       console.error("Error fetching mentor availability:", error);
@@ -74,45 +110,6 @@ class MentorAvailabilityController {
     }
   }
 
-  // static async getAvailabilityById(req: AuthenticatedRequest, res: Response) {
-  //   const { availabilityID } = req.params;
-
-  //   if (!availabilityID) {
-  //     return res.status(400).json({ message: "Availability ID is required" });
-  //   }
-
-  //   try {
-  //     const GET_AVAILABILITY = `
-  //       SELECT
-  //         availability_id, start_time, end_time,
-  //         is_booked, session_id
-  //       FROM Mentor_Availability
-  //       WHERE availability_id = ?
-  //     `;
-
-  //     const [rows] = await pool.execute(GET_AVAILABILITY, [availabilityID]);
-  //     const availabilityData = (rows as any[])[0];
-
-  //     if (!availabilityData) {
-  //       return res.status(404).json({ message: "Availability not found" });
-  //     }
-
-  //     const availability = {
-  //       id: availabilityData.availability_id,
-  //       start: new Date(availabilityData.start_time).toISOString(),
-  //       end: new Date(availabilityData.end_time).toISOString(),
-  //       booked: availabilityData.session_id || "",
-  //     };
-
-  //     res.status(200).json({
-  //       success: true,
-  //       data: availability,
-  //     });
-  //   } catch (error) {
-  //     console.error("Get availability by ID error:", error);
-  //     res.status(500).json({ message: "Server error" });
-  //   }
-  // }
   static async getAvailabilityById(req: AuthenticatedRequest, res: Response) {
     const user_id = req.user?.user_id;
     const { availabilityID } = req.params;
@@ -130,16 +127,16 @@ class MentorAvailabilityController {
     }
 
     try {
-      // Check if user is a mentor
       const [mentorRows] = await pool.execute<RowDataPacket[]>(
         "SELECT mentor_id FROM Mentors WHERE user_id = ?",
         [user_id]
       );
 
       if (mentorRows.length === 0) {
-        return res
-          .status(403)
-          .json({ success: false, message: "Only mentors can view availability" });
+        return res.status(403).json({
+          success: false,
+          message: "Only mentors can view availability",
+        });
       }
       const mentor_id = mentorRows[0].mentor_id;
 
@@ -151,13 +148,17 @@ class MentorAvailabilityController {
         WHERE availability_id = ? AND mentor_id = ?
       `;
 
-      const [rows] = await pool.execute<RowDataPacket[]>(GET_AVAILABILITY, [availabilityID, mentor_id]);
+      const [rows] = await pool.execute<RowDataPacket[]>(GET_AVAILABILITY, [
+        availabilityID,
+        mentor_id,
+      ]);
       const availabilityData = rows[0];
 
       if (!availabilityData) {
-        return res
-          .status(404)
-          .json({ success: false, message: "Availability not found or doesn't belong to you" });
+        return res.status(404).json({
+          success: false,
+          message: "Availability not found or doesn't belong to you",
+        });
       }
 
       const medium: string[] = [];

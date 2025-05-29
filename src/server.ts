@@ -23,7 +23,7 @@ app.use("/api/student", studentRoutes);
 app.use("/api/mentor", mentorRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/sessions", sessionsRoutes);
-app.use("/api/groupsessions", groupSessionsRoutes);
+app.use("/api/group-sessions", groupSessionsRoutes);
 
 app.get("/api/interests", getAllInterests);
 

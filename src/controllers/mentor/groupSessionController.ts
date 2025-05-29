@@ -2,6 +2,31 @@ import { Request, Response, NextFunction } from "express";
 import pool from "../../config/database";
 import { v4 as uuidv4 } from "uuid";
 import cron from "node-cron";
+import { RowDataPacket } from "mysql2";
+
+// Add missing type for group session info
+type GroupSessionInfoType = {
+  id: string;
+  title: string;
+  description: string;
+  startTime: Date;
+  durationInMinutes: number;
+  mentor: {
+    id: string;
+    name: string;
+    photoLink: string;
+  };
+  participants: {
+    current: number;
+    max: number;
+  };
+  previewParticipants: {
+    id: string;
+    name: string;
+    photoLink: string;
+  }[];
+  platform_link: string;
+};
 
 interface GroupSessionRequest {
   title: string;
@@ -456,6 +481,7 @@ class GroupSessionController {
     }
   }
 
+  // In GroupSessionController.ts
   static async deleteGroupSession(
     req: Request,
     res: Response,
@@ -486,19 +512,21 @@ class GroupSessionController {
 
       const [sessionRows]: any[] = await pool.query(
         `SELECT
-          gs.group_session_id AS id,
-          gs.title,
-          gs.description,
-          gs.duration_mins AS durationInMinutes,
-          gs.session_date AS startTime,
-          gs.mentor_id,
-          gs.max_participants AS maxParticipants,
-          gs.platform AS platform_link,
-          COUNT(gsp.student_id) AS currentParticipants
-         FROM Group_Sessions gs
-         LEFT JOIN Group_Session_Participants gsp ON gs.group_session_id = gsp.group_session_id
-         WHERE gs.group_session_id = ?
-         GROUP BY gs.group_session_id`,
+        gs.group_session_id AS id,
+        gs.title,
+        gs.description,
+        gs.duration_mins AS durationInMinutes,
+        gs.session_date AS startTime,
+        gs.mentor_id,
+        gs.max_participants AS maxParticipants,
+        gs.platform AS platform_link,
+        COUNT(gsp.student_id) AS currentParticipants
+       FROM Group_Sessions gs
+       LEFT JOIN Group_Session_Participants gsp 
+       ON gs.group_session_id = gsp.group_session_id
+       AND gsp.status IN ('registered', 'waiting')
+       WHERE gs.group_session_id = ?
+       GROUP BY gs.group_session_id`,
         [groupSessionId]
       );
 
@@ -515,6 +543,14 @@ class GroupSessionController {
         res.status(403).json({
           success: false,
           error: "Not authorized to delete this session",
+        });
+        return;
+      }
+
+      if (session.currentParticipants > 0) {
+        res.status(403).json({
+          success: false,
+          error: "Cannot delete session with enrolled participants",
         });
         return;
       }
@@ -559,204 +595,384 @@ class GroupSessionController {
     }
   }
 
+  //   static async getAllGroupSessions(
+  //     req: Request,
+  //     res: Response,
+  //     next: NextFunction
+  //   ): Promise<void> {
+  //     try {
+  //       const [sessionRows]: any[] = await pool.query(
+  //         `SELECT
+  //           gs.group_session_id AS id,
+  //           gs.title,
+  //           gs.description,
+  //           gs.duration_mins AS durationInMinutes,
+  //           gs.session_date AS startTime,
+  //           gs.max_participants AS maxParticipants,
+  //           (SELECT COUNT(*) FROM Group_Session_Participants gsp2
+  //            WHERE gsp2.group_session_id = gs.group_session_id
+  //            AND gsp2.status = 'registered') AS currentParticipants,
+  //           m.mentor_id,
+  //           u.name AS mentor_name,
+  //           u.image_url,
+  //           gs.platform AS platform_link,
+  //           gs.status
+  //          FROM Group_Sessions gs
+  //          JOIN Mentors m ON gs.mentor_id = m.mentor_id
+  //          JOIN Users u ON m.user_id = u.user_id
+  //          ORDER BY gs.session_date ASC`
+  //       );
+
+  //       const sessionIds = sessionRows.map((row: any) => row.id);
+  //       const participantsBySession: Record<string, ParticipantPreview[]> = {};
+
+  //       if (sessionIds.length > 0) {
+  //         const [allParticipants]: any[] = await pool.query(
+  //           `SELECT
+  //             gsp.group_session_id,
+  //             s.student_id AS id,
+  //             u.name,
+  //             u.image_url
+  //            FROM Group_Session_Participants gsp
+  //            JOIN Students s ON gsp.student_id = s.student_id
+  //            JOIN Users u ON s.user_id = u.user_id
+  //            WHERE gsp.group_session_id IN (?)
+  //            AND gsp.status = 'registered'
+  //            ORDER BY gsp.joined_at ASC
+  //            LIMIT 5`,
+  //           [sessionIds]
+  //         );
+
+  //         allParticipants.forEach((participant: any) => {
+  //           const sessionId = participant.group_session_id;
+  //           if (!participantsBySession[sessionId]) {
+  //             participantsBySession[sessionId] = [];
+  //           }
+  //           if (participantsBySession[sessionId].length < 5) {
+  //             participantsBySession[sessionId].push({
+  //               id: participant.id,
+  //               name: participant.name,
+  //               photoLink: participant.image_url
+  //                 ? `${BASE_URL}/api/student/image/${participant.id}`
+  //                 : "",
+  //             });
+  //           }
+  //         });
+  //       }
+
+  //       const response: GroupSessionListResponse = {
+  //         success: true,
+  //         data: sessionRows.map((row: any) => ({
+  //           id: row.id,
+  //           title: row.title,
+  //           description: row.description,
+  //           durationInMinutes: row.durationInMinutes,
+  //           startTime: new Date(row.startTime).toISOString(),
+  //           mentor: {
+  //             id: row.mentor_id,
+  //             name: row.mentor_name,
+  //             photoLink: row.image_url
+  //               ? `${BASE_URL}/api/mentor/image/${row.mentor_id}`
+  //               : "",
+  //           },
+  //           participants: {
+  //             current: parseInt(row.currentParticipants, 10),
+  //             max: row.maxParticipants,
+  //           },
+  //           platform_link: row.platform_link,
+  //           status: row.status,
+  //           previewParticipants: participantsBySession[row.id] || [],
+  //         })),
+  //       };
+
+  //       res.status(200).json(response);
+  //     } catch (error: any) {
+  //       console.error("Error fetching all group sessions:", error);
+  //       res.status(500).json({
+  //         success: false,
+  //         error: "Internal server error",
+  //         details: error.message,
+  //       });
+  //     }
+  //   }
+
+  //   static async getGroupSessionById(
+  //     req: Request,
+  //     res: Response,
+  //     next: NextFunction
+  //   ): Promise<void> {
+  //     try {
+  //       const groupSessionId = req.params.gsid;
+
+  //       if (!groupSessionId) {
+  //         res.status(400).json({ success: false, error: "Session ID required" });
+  //         return;
+  //       }
+
+  //       const [sessionRows]: any[] = await pool.query(
+  //         `SELECT
+  //           gs.group_session_id AS id,
+  //           gs.title,
+  //           gs.description,
+  //           gs.duration_mins AS durationInMinutes,
+  //           gs.session_date AS startTime,
+  //           gs.max_participants AS maxParticipants,
+  //           (SELECT COUNT(*) FROM Group_Session_Participants
+  //            WHERE group_session_id = gs.group_session_id
+  //            AND status = 'registered') AS currentParticipants,
+  //           m.mentor_id,
+  //           u.name AS mentor_name,
+  //           u.image_url,
+  //           gs.platform AS platform_link,
+  //           gs.status
+  //          FROM Group_Sessions gs
+  //          JOIN Mentors m ON gs.mentor_id = m.mentor_id
+  //          JOIN Users u ON m.user_id = u.user_id
+  //          WHERE gs.group_session_id = ?`,
+  //         [groupSessionId]
+  //       );
+
+  //       if (!sessionRows?.length) {
+  //         res.status(404).json({ success: false, error: "Session not found" });
+  //         return;
+  //       }
+
+  //       const session = sessionRows[0];
+  //       const [participantRows]: any[] = await pool.query(
+  //         `SELECT
+  //           s.student_id AS id,
+  //           u.name,
+  //           u.image_url
+  //          FROM Group_Session_Participants gsp
+  //          JOIN Students s ON gsp.student_id = s.student_id
+  //          JOIN Users u ON s.user_id = u.user_id
+  //          WHERE gsp.group_session_id = ?
+  //          AND gsp.status = 'registered'
+  //          ORDER BY gsp.joined_at ASC
+  //          LIMIT 5`,
+  //         [groupSessionId]
+  //       );
+
+  //       const previewParticipants = participantRows.map((participant: any) => ({
+  //         id: participant.id,
+  //         name: participant.name,
+  //         photoLink: participant.image_url
+  //           ? `${BASE_URL}/api/student/image/${participant.id}`
+  //           : "",
+  //       }));
+
+  //       const response: GroupSessionResponse = {
+  //         success: true,
+  //         data: {
+  //           id: session.id,
+  //           title: session.title,
+  //           description: session.description,
+  //           durationInMinutes: session.durationInMinutes,
+  //           startTime: new Date(session.startTime).toISOString(),
+  //           mentor: {
+  //             id: session.mentor_id,
+  //             name: session.mentor_name,
+  //             photoLink: session.image_url
+  //               ? `${BASE_URL}/api/mentor/image/${session.mentor_id}`
+  //               : "",
+  //           },
+  //           participants: {
+  //             current: parseInt(session.currentParticipants, 10),
+  //             max: session.maxParticipants,
+  //           },
+  //           platform_link: session.platform_link,
+  //           status: session.status,
+  //           previewParticipants,
+  //         },
+  //       };
+
+  //       res.status(200).json(response);
+  //     } catch (error: any) {
+  //       console.error("Error fetching group session:", error);
+  //       res.status(500).json({
+  //         success: false,
+  //         error: "Internal server error",
+  //         details: error.message,
+  //       });
+  //     }
+  //   }
+  // }
+
   static async getAllGroupSessions(
-    req: Request,
-    res: Response,
-    next: NextFunction
-  ): Promise<void> {
+    req: Request & { user?: any },
+    res: Response
+  ) {
     try {
-      const [sessionRows]: any[] = await pool.query(
-        `SELECT
-          gs.group_session_id AS id,
-          gs.title,
-          gs.description,
-          gs.duration_mins AS durationInMinutes,
-          gs.session_date AS startTime,
-          gs.max_participants AS maxParticipants,
-          (SELECT COUNT(*) FROM Group_Session_Participants gsp2
-           WHERE gsp2.group_session_id = gs.group_session_id
-           AND gsp2.status = 'registered') AS currentParticipants,
-          m.mentor_id,
-          u.name AS mentor_name,
-          u.image_url,
-          gs.platform AS platform_link,
-          gs.status
-         FROM Group_Sessions gs
-         JOIN Mentors m ON gs.mentor_id = m.mentor_id
-         JOIN Users u ON m.user_id = u.user_id
-         ORDER BY gs.session_date ASC`
+      const [sessions] = await pool.query<RowDataPacket[]>(
+        `
+      SELECT 
+        gs.group_session_id AS id,
+        gs.title,
+        gs.description,
+        gs.session_date AS startTime,
+        gs.duration_mins AS durationInMinutes,
+        gs.max_participants,
+        (SELECT COUNT(*) FROM Group_Session_Participants gsp 
+         WHERE gsp.group_session_id = gs.group_session_id 
+         AND gsp.status = 'registered') AS current_registered,
+        gs.platform AS platform_link,
+        m.mentor_id,
+        u.name AS mentor_name,
+        u.image_url AS mentor_photo
+      FROM Group_Sessions gs
+      JOIN Mentors m ON gs.mentor_id = m.mentor_id
+      JOIN Users u ON m.user_id = u.user_id
+      `
       );
 
-      const sessionIds = sessionRows.map((row: any) => row.id);
-      const participantsBySession: Record<string, ParticipantPreview[]> = {};
-
-      if (sessionIds.length > 0) {
-        const [allParticipants]: any[] = await pool.query(
-          `SELECT
-            gsp.group_session_id,
+      const baseUrl = process.env.API_BASE_URL || "http://localhost:3000";
+      const groupSessions: GroupSessionInfoType[] = await Promise.all(
+        sessions.map(async (session) => {
+          const [participants] = await pool.query<RowDataPacket[]>(
+            `
+          SELECT 
             s.student_id AS id,
             u.name,
-            u.image_url
-           FROM Group_Session_Participants gsp
-           JOIN Students s ON gsp.student_id = s.student_id
-           JOIN Users u ON s.user_id = u.user_id
-           WHERE gsp.group_session_id IN (?)
-           AND gsp.status = 'registered'
-           ORDER BY gsp.joined_at ASC
-           LIMIT 5`,
-          [sessionIds]
-        );
+            u.image_url AS photoLink
+          FROM Group_Session_Participants gsp
+          JOIN Students s ON gsp.student_id = s.student_id
+          JOIN Users u ON s.user_id = u.user_id
+          WHERE gsp.group_session_id = ? AND gsp.status = 'registered'
+          ORDER BY gsp.joined_at ASC
+          LIMIT 3
+          `,
+            [session.id]
+          );
 
-        allParticipants.forEach((participant: any) => {
-          const sessionId = participant.group_session_id;
-          if (!participantsBySession[sessionId]) {
-            participantsBySession[sessionId] = [];
-          }
-          if (participantsBySession[sessionId].length < 5) {
-            participantsBySession[sessionId].push({
-              id: participant.id,
-              name: participant.name,
-              photoLink: participant.image_url
-                ? `${BASE_URL}/api/student/image/${participant.id}`
+          return {
+            id: session.id,
+            title: session.title,
+            description: session.description,
+            startTime: new Date(session.startTime),
+            durationInMinutes: session.durationInMinutes,
+            mentor: {
+              id: session.mentor_id,
+              name: session.mentor_name,
+              photoLink: session.mentor_photo
+                ? `${baseUrl}/api/mentor/image/${session.mentor_id}`
                 : "",
-            });
-          }
-        });
-      }
+            },
+            participants: {
+              current: session.current_registered,
+              max: session.max_participants,
+            },
+            previewParticipants: participants.map((p) => ({
+              id: p.id,
+              name: p.name,
+              photoLink: p.photoLink
+                ? `${baseUrl}/api/student/image/${p.id}`
+                : "",
+            })),
+            platform_link: session.platform_link || "",
+          };
+        })
+      );
 
-      const response: GroupSessionListResponse = {
-        success: true,
-        data: sessionRows.map((row: any) => ({
-          id: row.id,
-          title: row.title,
-          description: row.description,
-          durationInMinutes: row.durationInMinutes,
-          startTime: new Date(row.startTime).toISOString(),
-          mentor: {
-            id: row.mentor_id,
-            name: row.mentor_name,
-            photoLink: row.image_url
-              ? `${BASE_URL}/api/mentor/image/${row.mentor_id}`
-              : "",
-          },
-          participants: {
-            current: parseInt(row.currentParticipants, 10),
-            max: row.maxParticipants,
-          },
-          platform_link: row.platform_link,
-          status: row.status,
-          previewParticipants: participantsBySession[row.id] || [],
-        })),
-      };
-
-      res.status(200).json(response);
+      res.status(200).json({ success: true, data: groupSessions });
     } catch (error: any) {
-      console.error("Error fetching all group sessions:", error);
+      console.error("getAllGroupSessions error:", error);
       res.status(500).json({
         success: false,
-        error: "Internal server error",
-        details: error.message,
+        message: "Server error",
+        error: error.message,
       });
     }
   }
 
   static async getGroupSessionById(
-    req: Request,
-    res: Response,
-    next: NextFunction
-  ): Promise<void> {
+    req: Request & { user?: any },
+    res: Response
+  ) {
+    const groupSessionId = req.params.gsid;
     try {
-      const groupSessionId = req.params.gsid;
-
-      if (!groupSessionId) {
-        res.status(400).json({ success: false, error: "Session ID required" });
-        return;
-      }
-
-      const [sessionRows]: any[] = await pool.query(
-        `SELECT
-          gs.group_session_id AS id,
-          gs.title,
-          gs.description,
-          gs.duration_mins AS durationInMinutes,
-          gs.session_date AS startTime,
-          gs.max_participants AS maxParticipants,
-          (SELECT COUNT(*) FROM Group_Session_Participants
-           WHERE group_session_id = gs.group_session_id
-           AND status = 'registered') AS currentParticipants,
-          m.mentor_id,
-          u.name AS mentor_name,
-          u.image_url,
-          gs.platform AS platform_link,
-          gs.status
-         FROM Group_Sessions gs
-         JOIN Mentors m ON gs.mentor_id = m.mentor_id
-         JOIN Users u ON m.user_id = u.user_id
-         WHERE gs.group_session_id = ?`,
+      const [sessions] = await pool.query<RowDataPacket[]>(
+        `
+      SELECT 
+        gs.group_session_id AS id,
+        gs.title,
+        gs.description,
+        gs.session_date AS startTime,
+        gs.duration_mins AS durationInMinutes,
+        gs.max_participants,
+        (SELECT COUNT(*) FROM Group_Session_Participants gsp 
+         WHERE gsp.group_session_id = gs.group_session_id 
+         AND gsp.status = 'registered') AS current_registered,
+        gs.platform AS platform_link,
+        m.mentor_id,
+        u.name AS mentor_name,
+        u.image_url AS mentor_photo
+      FROM Group_Sessions gs
+      JOIN Mentors m ON gs.mentor_id = m.mentor_id
+      JOIN Users u ON m.user_id = u.user_id
+      WHERE gs.group_session_id = ?
+      `,
         [groupSessionId]
       );
 
-      if (!sessionRows?.length) {
-        res.status(404).json({ success: false, error: "Session not found" });
-        return;
+      if (sessions.length === 0) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Group session not found" });
       }
 
-      const session = sessionRows[0];
-      const [participantRows]: any[] = await pool.query(
-        `SELECT
-          s.student_id AS id,
-          u.name,
-          u.image_url
-         FROM Group_Session_Participants gsp
-         JOIN Students s ON gsp.student_id = s.student_id
-         JOIN Users u ON s.user_id = u.user_id
-         WHERE gsp.group_session_id = ?
-         AND gsp.status = 'registered'
-         ORDER BY gsp.joined_at ASC
-         LIMIT 5`,
+      const session = sessions[0];
+      const [participants] = await pool.query<RowDataPacket[]>(
+        `
+      SELECT 
+        s.student_id AS id,
+        u.name,
+        u.image_url AS photoLink
+      FROM Group_Session_Participants gsp
+      JOIN Students s ON gsp.student_id = s.student_id
+      JOIN Users u ON s.user_id = u.user_id
+      WHERE gsp.group_session_id = ? AND gsp.status = 'registered'
+      ORDER BY gsp.joined_at ASC
+      LIMIT 3
+      `,
         [groupSessionId]
       );
 
-      const previewParticipants = participantRows.map((participant: any) => ({
-        id: participant.id,
-        name: participant.name,
-        photoLink: participant.image_url
-          ? `${BASE_URL}/api/student/image/${participant.id}`
-          : "",
-      }));
-
-      const response: GroupSessionResponse = {
-        success: true,
-        data: {
-          id: session.id,
-          title: session.title,
-          description: session.description,
-          durationInMinutes: session.durationInMinutes,
-          startTime: new Date(session.startTime).toISOString(),
-          mentor: {
-            id: session.mentor_id,
-            name: session.mentor_name,
-            photoLink: session.image_url
-              ? `${BASE_URL}/api/mentor/image/${session.mentor_id}`
-              : "",
-          },
-          participants: {
-            current: parseInt(session.currentParticipants, 10),
-            max: session.maxParticipants,
-          },
-          platform_link: session.platform_link,
-          status: session.status,
-          previewParticipants,
+      const baseUrl = process.env.API_BASE_URL || "http://localhost:3000";
+      const groupSession: GroupSessionInfoType = {
+        id: session.id,
+        title: session.title,
+        description: session.description,
+        startTime: new Date(session.startTime),
+        durationInMinutes: session.durationInMinutes,
+        mentor: {
+          id: session.mentor_id,
+          name: session.mentor_name,
+          photoLink: session.mentor_photo
+            ? `${baseUrl}/api/mentor/image/${session.mentor_id}`
+            : "",
         },
+        participants: {
+          current: session.current_registered,
+          max: session.max_participants,
+        },
+        previewParticipants: participants.map((p) => ({
+          id: p.id,
+          name: p.name,
+          photoLink: p.photoLink ? `${baseUrl}/api/student/image/${p.id}` : "",
+        })),
+        platform_link: session.platform_link || "",
       };
 
-      res.status(200).json(response);
+      res.status(200).json({ success: true, data: groupSession });
     } catch (error: any) {
-      console.error("Error fetching group session:", error);
+      console.error(
+        `getGroupSessionById error for gsid=${groupSessionId}:`,
+        error
+      );
       res.status(500).json({
         success: false,
-        error: "Internal server error",
-        details: error.message,
+        message: "Server error",
+        error: error.message,
       });
     }
   }
