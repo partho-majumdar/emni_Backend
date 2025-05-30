@@ -145,9 +145,71 @@ CREATE TABLE BookedSessionLinks(
   CONSTRAINT fk_one_on_one_session_id FOREIGN KEY (one_on_one_session_id) REFERENCES One_On_One_Sessions (one_on_one_session_id) ON DELETE CASCADE
 );
 
---------------------------------
+------------------------------------------------
 
+CREATE TABLE UCOIN_Purchases (
+    purchase_id CHAR(36) DEFAULT (UUID()) NOT NULL,
+    user_id CHAR(36) NOT NULL,
+    tk_amount DECIMAL(10, 2) NOT NULL,
+    ucoin_amount DECIMAL(15, 2) NOT NULL,
+    purchase_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    payment_method ENUM('Bkash', 'Nagad', 'Bank Card', 'Other', 'Rocket') NOT NULL;
+    transaction_reference VARCHAR(100) UNIQUE NOT NULL,
+    status ENUM('Pending', 'Completed', 'Failed') DEFAULT 'Pending' NOT NULL,
+    phone_number VARCHAR(20) NULL, 
+    address VARCHAR(255) NULL,
+    CONSTRAINT pk_ucoin_purchases PRIMARY KEY (purchase_id),
+    CONSTRAINT fk_ucoin_purchases_user FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE,
+    CONSTRAINT chk_positive_tk CHECK (tk_amount > 0),
+    CONSTRAINT chk_positive_ucoin CHECK (ucoin_amount > 0)
+);
 
+-- Unchanged: Tracks UCOIN balances for users (students and mentors)
+CREATE TABLE User_Balances (
+    balance_id CHAR(36) DEFAULT (UUID()) NOT NULL,
+    user_id CHAR(36) NOT NULL,
+    ucoin_balance DECIMAL(15, 2) DEFAULT 0.00 NOT NULL,
+    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP NOT NULL,
+    CONSTRAINT pk_user_balances PRIMARY KEY (balance_id),
+    CONSTRAINT fk_user_balances_user FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE,
+    CONSTRAINT chk_positive_balance CHECK (ucoin_balance >= 0)
+);
+
+-- Unchanged: Tracks UCOIN transactions for 1:1 session bookings
+CREATE TABLE Session_Transactions (
+    transaction_id CHAR(36) DEFAULT (UUID()) NOT NULL,
+    one_on_one_session_id CHAR(36) NOT NULL,
+    student_id CHAR(36) NOT NULL,
+    mentor_id CHAR(36) NOT NULL,
+    ucoin_amount DECIMAL(15, 2) NOT NULL,
+    transaction_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    status ENUM('Pending', 'Completed', 'Refunded') DEFAULT 'Pending' NOT NULL,
+    CONSTRAINT pk_session_transactions PRIMARY KEY (transaction_id),
+    CONSTRAINT fk_session_transactions_session FOREIGN KEY (one_on_one_session_id) REFERENCES One_On_One_Sessions(one_on_one_session_id) ON DELETE CASCADE,
+    CONSTRAINT fk_session_transactions_student FOREIGN KEY (student_id) REFERENCES Students(student_id) ON DELETE CASCADE,
+    CONSTRAINT fk_session_transactions_mentor FOREIGN KEY (mentor_id) REFERENCES Mentors(mentor_id) ON DELETE CASCADE,
+    CONSTRAINT chk_positive_transaction_amount CHECK (ucoin_amount > 0)
+);
+
+CREATE TABLE Refund_Requests (
+    request_id CHAR(36) DEFAULT (UUID()) NOT NULL,
+    one_on_one_session_id CHAR(36) NULL,
+    student_id CHAR(36) NOT NULL,
+    mentor_id CHAR(36) NOT NULL,
+    ucoin_amount DECIMAL(15, 2) NOT NULL,
+    request_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    processed_date TIMESTAMP NULL,
+    status ENUM('Pending', 'Approved', 'Rejected') DEFAULT 'Pending' NOT NULL,
+    reason TEXT NULL,
+    CONSTRAINT pk_refund_requests PRIMARY KEY (request_id),
+    CONSTRAINT fk_refund_requests_session FOREIGN KEY (one_on_one_session_id) 
+        REFERENCES One_On_One_Sessions(one_on_one_session_id) ON DELETE SET NULL,
+    CONSTRAINT fk_refund_requests_student FOREIGN KEY (student_id) 
+        REFERENCES Students(student_id) ON DELETE CASCADE,
+    CONSTRAINT fk_refund_requests_mentor FOREIGN KEY (mentor_id) 
+        REFERENCES Mentors(mentor_id) ON DELETE CASCADE
+);
+---------------------------------------------------------------------
 
 
 

@@ -2,11 +2,18 @@ import { Request, Response, NextFunction } from "express";
 import db from "../../config/database";
 import { RowDataPacket } from "mysql2";
 import crypto from "crypto";
-import cron from "node-cron";
 
 interface BookSessionRequest {
   AvailabilityID: string;
   medium: "online" | "offline";
+}
+
+interface UcoinPurchaseRequest {
+  tk_amount: number;
+  payment_method: "Bkash" | "Nagad" | "Bank Card" | "Other";
+  transaction_reference: string;
+  phone_number?: string;
+  address?: string;
 }
 
 interface JwtPayload {
@@ -19,6 +26,172 @@ interface AuthenticatedRequest extends Request {
 }
 
 export class StudentSessionController {
+  static async purchaseUcoin(req: AuthenticatedRequest, res: Response) {
+    const userId = req.user?.user_id;
+    const {
+      tk_amount,
+      payment_method,
+      transaction_reference,
+      phone_number,
+      address,
+    } = req.body as UcoinPurchaseRequest;
+
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    if (!tk_amount || !payment_method || !transaction_reference) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Required fields: tk_amount, payment_method, transaction_reference",
+      });
+    }
+
+    if (tk_amount <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "tk_amount must be positive",
+      });
+    }
+
+    // Calculate ucoin_amount: 1000 Taka = 1000
+    const ucoin_amount = tk_amount / 10;
+
+    try {
+      await db.query("START TRANSACTION");
+
+      // Verify user has a student profile
+      const [profileRows] = await db.query<RowDataPacket[]>(
+        `SELECT student_id FROM Students WHERE user_id = ?`,
+        [userId]
+      );
+      if (profileRows.length === 0) {
+        await db.query("ROLLBACK");
+        return res
+          .status(404)
+          .json({ success: false, message: "Student profile not found" });
+      }
+
+      // Check unique transaction_reference
+      const [transactionCheck] = await db.query<RowDataPacket[]>(
+        `SELECT purchase_id FROM UCOIN_Purchases WHERE transaction_reference = ?`,
+        [transaction_reference]
+      );
+      if (transactionCheck.length > 0) {
+        await db.query("ROLLBACK");
+        return res.status(400).json({
+          success: false,
+          message: "Transaction reference already exists",
+        });
+      }
+
+      // Create purchase record
+      const purchaseId = crypto.randomUUID();
+      await db.query(
+        `INSERT INTO UCOIN_Purchases 
+         (purchase_id, user_id, tk_amount, ucoin_amount, payment_method, transaction_reference, phone_number, address, status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Completed')`,
+        [
+          purchaseId,
+          userId,
+          tk_amount,
+          ucoin_amount,
+          payment_method,
+          transaction_reference,
+          phone_number || null,
+          address || null,
+        ]
+      );
+
+      // Update or create user balance
+      const [balanceRows] = await db.query<RowDataPacket[]>(
+        `SELECT balance_id, ucoin_balance FROM User_Balances WHERE user_id = ?`,
+        [userId]
+      );
+
+      if (balanceRows.length === 0) {
+        const balanceId = crypto.randomUUID();
+        await db.query(
+          `INSERT INTO User_Balances (balance_id, user_id, ucoin_balance)
+           VALUES (?, ?, ?)`,
+          [balanceId, userId, ucoin_amount]
+        );
+      } else {
+        await db.query(
+          `UPDATE User_Balances 
+           SET ucoin_balance = ucoin_balance + ?, last_updated = CURRENT_TIMESTAMP
+           WHERE user_id = ?`,
+          [ucoin_amount, userId]
+        );
+      }
+
+      await db.query("COMMIT");
+
+      const [updatedBalance] = await db.query<RowDataPacket[]>(
+        `SELECT ucoin_balance FROM User_Balances WHERE user_id = ?`,
+        [userId]
+      );
+
+      res.status(200).json({
+        success: true,
+        message: `UCOIN purchased successfully (${tk_amount} Taka = ${ucoin_amount} UCOIN)`,
+        data: {
+          new_balance: updatedBalance[0].ucoin_balance,
+          purchase_id: purchaseId,
+        },
+      });
+    } catch (error: any) {
+      await db.query("ROLLBACK");
+      console.error("UCOIN purchase error:", error);
+      res.status(500).json({
+        success: false,
+        message: "Failed to process UCOIN purchase",
+        error: error.message,
+      });
+    }
+  }
+
+  static async getBalance(req: AuthenticatedRequest, res: Response) {
+    const userId = req.user?.user_id;
+
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    try {
+      const [balanceRows] = await db.query<RowDataPacket[]>(
+        `SELECT ucoin_balance, last_updated FROM User_Balances WHERE user_id = ?`,
+        [userId]
+      );
+
+      if (balanceRows.length === 0) {
+        return res.status(200).json({
+          success: true,
+          message: "Balance retrieved successfully",
+          data: { ucoin_balance: 0, last_updated: null },
+        });
+      }
+
+      res.status(200).json({
+        success: true,
+        message: "Balance retrieved successfully",
+        data: {
+          ucoin_balance: balanceRows[0].ucoin_balance,
+          last_updated: balanceRows[0].last_updated,
+        },
+      });
+    } catch (error: any) {
+      console.error("Get balance error:", error);
+      res.status(500).json({
+        success: false,
+        message: "Failed to get balance",
+        error: error.message,
+      });
+    }
+  }
+
+  /* Book Session with UCOIN Endpoint */
   static async bookSession(req: AuthenticatedRequest, res: Response) {
     const userId = req.user?.user_id;
     const sessionId = req.params.sessionID;
@@ -49,12 +222,11 @@ export class StudentSessionController {
     try {
       await db.query("START TRANSACTION");
 
-      // Step 1: Verify student exists in Students table
+      // 1. Verify student exists
       const [studentRows] = await db.query<RowDataPacket[]>(
-        "SELECT student_id FROM Students WHERE user_id = ?",
+        `SELECT student_id FROM Students WHERE user_id = ?`,
         [userId]
       );
-      console.log("Student check:", studentRows);
       if (studentRows.length === 0) {
         await db.query("ROLLBACK");
         return res
@@ -63,32 +235,40 @@ export class StudentSessionController {
       }
       const student = studentRows[0];
 
-      // Step 2: Validate session and availability
+      // 2. Check student balance
+      const [balanceRows] = await db.query<RowDataPacket[]>(
+        `SELECT ucoin_balance FROM User_Balances WHERE user_id = ?`,
+        [userId]
+      );
+      if (balanceRows.length === 0) {
+        await db.query("ROLLBACK");
+        return res.status(500).json({
+          success: false,
+          message: "User balance not found. Please contact support.",
+        });
+      }
+      const studentBalance = parseFloat(balanceRows[0].ucoin_balance);
+      console.log(
+        `Student ${userId} Balance: ${studentBalance} (Type: ${typeof studentBalance})`
+      );
+
+      // 3. Validate session and get price
       const [sessionRows] = await db.query<RowDataPacket[]>(
-        `
-        SELECT
-          s.session_id,
-          ma.availability_id,
-          ma.is_booked,
-          ma.start_time,
-          ma.end_time,
-          ma.mentor_id,
-          ma.is_online,
-          ma.is_offline
-        FROM Sessions s
-        JOIN Mentor_Availability ma ON s.mentor_id = ma.mentor_id
-        WHERE s.session_id = ?
-          AND ma.availability_id = ?
-          AND ma.is_booked = FALSE
-          AND (
-            (ma.is_online = TRUE AND ? = 'online') OR
-            (ma.is_offline = TRUE AND ? = 'offline')
-          )
-        `,
+        `SELECT s.session_id, s.price, ma.availability_id, ma.mentor_id, ma.start_time, ma.end_time,
+              ma.is_online, ma.is_offline, m.user_id AS mentor_user_id
+       FROM Sessions s
+       JOIN Mentor_Availability ma ON s.mentor_id = ma.mentor_id
+       JOIN Mentors m ON ma.mentor_id = m.mentor_id
+       WHERE s.session_id = ? 
+         AND ma.availability_id = ? 
+         AND ma.is_booked = FALSE
+         AND (
+           (ma.is_online = TRUE AND ? = 'online') OR
+           (ma.is_offline = TRUE AND ? = 'offline')
+         )`,
         [sessionId, AvailabilityID, medium, medium]
       );
 
-      console.log("Session and availability check result:", sessionRows);
       if (sessionRows.length === 0) {
         const [sessionCheck] = await db.query<RowDataPacket[]>(
           "SELECT session_id, mentor_id FROM Sessions WHERE session_id = ?",
@@ -98,8 +278,6 @@ export class StudentSessionController {
           "SELECT availability_id, mentor_id, is_booked, is_online, is_offline FROM Mentor_Availability WHERE availability_id = ?",
           [AvailabilityID]
         );
-        console.log("Session exists:", sessionCheck);
-        console.log("Availability exists:", availabilityCheck);
 
         let errorMessage =
           "Session or availability not found or already booked";
@@ -124,21 +302,34 @@ export class StudentSessionController {
         return res.status(404).json({ success: false, message: errorMessage });
       }
       const sessionData = sessionRows[0];
+      const sessionPrice = parseFloat(sessionData.price);
+      console.log(
+        `Session ${sessionId} Price: ${sessionPrice} (Type: ${typeof sessionPrice}), Medium: ${medium}`
+      );
 
-      // Step 3: Check for overlapping bookings using DATETIME
+      // 4. Check student balance
+      if (studentBalance < sessionPrice) {
+        await db.query("ROLLBACK");
+        return res.status(400).json({
+          success: false,
+          message: `Insufficient UCOIN balance. Required: ${sessionPrice.toFixed(
+            2
+          )}, Available: ${studentBalance.toFixed(2)}`,
+        });
+      }
+
+      // 5. Check for overlapping bookings
       const [overlappingRows] = await db.query<RowDataPacket[]>(
-        `
-        SELECT COUNT(*) as count
-        FROM Mentor_Availability ma
-        JOIN One_On_One_Sessions oos ON ma.availability_id = oos.availability_id
-        WHERE ma.mentor_id = ?
-        AND (
-          (ma.start_time < ? AND ma.end_time > ?) OR
-          (ma.start_time < ? AND ma.end_time > ?) OR
-          (ma.start_time >= ? AND ma.end_time <= ?)
-        )
-        AND ma.is_booked = TRUE
-        `,
+        `SELECT COUNT(*) as count
+       FROM Mentor_Availability ma
+       JOIN One_On_One_Sessions oos ON ma.availability_id = oos.availability_id
+       WHERE ma.mentor_id = ?
+         AND (
+           (ma.start_time < ? AND ma.end_time > ?) OR
+           (ma.start_time < ? AND ma.end_time > ?) OR
+           (ma.start_time >= ? AND ma.end_time <= ?)
+         )
+         AND ma.is_booked = TRUE`,
         [
           sessionData.mentor_id,
           sessionData.end_time,
@@ -149,10 +340,7 @@ export class StudentSessionController {
           sessionData.end_time,
         ]
       );
-      console.log("Overlap check:", overlappingRows);
-      const overlapCount = overlappingRows[0].count;
-
-      if (overlapCount > 0) {
+      if (overlappingRows[0].count > 0) {
         await db.query("ROLLBACK");
         return res.status(400).json({
           success: false,
@@ -160,220 +348,587 @@ export class StudentSessionController {
         });
       }
 
-      // Step 4: Insert into One_On_One_Sessions
+      // 6. Deduct from student balance
+      await db.query(
+        `UPDATE User_Balances 
+       SET ucoin_balance = ucoin_balance - ?, last_updated = CURRENT_TIMESTAMP
+       WHERE user_id = ?`,
+        [sessionPrice, userId]
+      );
+
+      // 7. Add to mentor balance
+      const [mentorBalance] = await db.query<RowDataPacket[]>(
+        `SELECT balance_id, ucoin_balance FROM User_Balances WHERE user_id = ?`,
+        [sessionData.mentor_user_id]
+      );
+      if (mentorBalance.length === 0) {
+        const mentorBalanceId = crypto.randomUUID();
+        await db.query(
+          `INSERT INTO User_Balances (balance_id, user_id, ucoin_balance)
+         VALUES (?, ?, 0.00)`,
+          [mentorBalanceId, sessionData.mentor_user_id]
+        );
+        await db.query(
+          `UPDATE User_Balances 
+         SET ucoin_balance = ucoin_balance + ?, last_updated = CURRENT_TIMESTAMP
+         WHERE user_id = ?`,
+          [sessionPrice, sessionData.mentor_user_id]
+        );
+      } else {
+        await db.query(
+          `UPDATE User_Balances 
+         SET ucoin_balance = ucoin_balance + ?, last_updated = CURRENT_TIMESTAMP
+         WHERE user_id = ?`,
+          [sessionPrice, sessionData.mentor_user_id]
+        );
+      }
+
+      // 8. Create session booking
       const oneOnOneSessionId = crypto.randomUUID();
-      const [insertResult] = await db.query(
-        `
-        INSERT INTO One_On_One_Sessions (one_on_one_session_id, availability_id, student_id, created_at, medium)
-        VALUES (?, ?, ?, NOW(), ?)
-        `,
+      await db.query(
+        `INSERT INTO One_On_One_Sessions 
+       (one_on_one_session_id, availability_id, student_id, medium) 
+       VALUES (?, ?, ?, ?)`,
         [oneOnOneSessionId, AvailabilityID, student.student_id, medium]
       );
-      console.log("Inserted into One_On_One_Sessions:", insertResult);
 
-      // Step 5: Update Mentor_Availability
-      const [updateResult] = await db.query(
-        `
-        UPDATE Mentor_Availability
-        SET is_booked = TRUE, session_id = ?
-        WHERE availability_id = ?
-        `,
+      // 9. Update availability
+      await db.query(
+        `UPDATE Mentor_Availability 
+       SET is_booked = TRUE, session_id = ? 
+       WHERE availability_id = ?`,
         [sessionId, AvailabilityID]
       );
-      console.log("Updated Mentor_Availability:", updateResult);
 
-      // Verify the update
-      const [verifyUpdate] = await db.query<RowDataPacket[]>(
-        `
-        SELECT is_booked, session_id
-        FROM Mentor_Availability
-        WHERE availability_id = ?
-        `,
-        [AvailabilityID]
+      // 10. Record transaction
+      const transactionId = crypto.randomUUID();
+      await db.query(
+        `INSERT INTO Session_Transactions 
+       (transaction_id, one_on_one_session_id, student_id, mentor_id, ucoin_amount, status) 
+       VALUES (?, ?, ?, ?, ?, 'Completed')`,
+        [
+          transactionId,
+          oneOnOneSessionId,
+          student.student_id,
+          sessionData.mentor_id,
+          sessionPrice,
+        ]
       );
-      console.log("Verified Mentor_Availability update:", verifyUpdate);
-      if (
-        verifyUpdate.length === 0 ||
-        !verifyUpdate[0].is_booked ||
-        verifyUpdate[0].session_id !== sessionId
-      ) {
-        await db.query("ROLLBACK");
-        return res
-          .status(500)
-          .json({ success: false, message: "Failed to update availability" });
-      }
 
       await db.query("COMMIT");
 
+      const [updatedBalance] = await db.query<RowDataPacket[]>(
+        `SELECT ucoin_balance FROM User_Balances WHERE user_id = ?`,
+        [userId]
+      );
+
       res.status(200).json({
         success: true,
+        message: "Session booked successfully",
+        data: {
+          session_id: oneOnOneSessionId,
+          new_balance: parseFloat(updatedBalance[0].ucoin_balance),
+        },
       });
     } catch (error: any) {
       await db.query("ROLLBACK");
-      console.error("Error booking session:", error);
+      console.error("Booking error:", error);
       res.status(500).json({
         success: false,
-        message: "Server error",
+        message: "Failed to book session",
         error: error.message,
       });
     }
   }
 
-  static async mentorUpdateSessionPlace(
-    req: AuthenticatedRequest,
-    res: Response,
-    next: NextFunction
-  ): Promise<void> {
-    try {
-      const mentorUserId = req.user?.user_id;
-      const sessionId = req.params.sessionId;
-      const { place } = req.body as { place: string };
+  /* Student Request Refund Endpoint */
 
-      if (!mentorUserId) {
-        res.status(401).json({ success: false, message: "Unauthorized" });
-        return;
-      }
+  static async requestRefund(req: AuthenticatedRequest, res: Response) {
+    const studentUserId = req.user?.user_id;
+    const sessionId = req.params.sessionId;
+    const { reason } = req.body;
 
-      if (!sessionId || !place) {
-        res.status(400).json({
-          success: false,
-          message: "Session ID and place are required",
-        });
-        return;
-      }
+    // Input validation
+    if (!studentUserId) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
 
-      // Verify mentor owns this session
-      const [session] = await db.query<RowDataPacket[]>(
-        `SELECT oos.one_on_one_session_id 
-         FROM One_On_One_Sessions oos
-         JOIN Mentor_Availability ma ON oos.availability_id = ma.availability_id
-         JOIN Mentors m ON ma.mentor_id = m.mentor_id
-         WHERE oos.one_on_one_session_id = ? 
-         AND m.user_id = ?`,
-        [sessionId, mentorUserId]
-      );
-
-      if (session.length === 0) {
-        res.status(404).json({
-          success: false,
-          message: "Session not found or you don't have permission",
-        });
-        return;
-      }
-
-      // Update place
-      await db.query(
-        `UPDATE One_On_One_Sessions 
-         SET place = ?
-         WHERE one_on_one_session_id = ?`,
-        [place, sessionId]
-      );
-
-      res.status(200).json({
-        success: true,
-        // message: "Session location updated successfully",
+    if (!sessionId) {
+      return res.status(400).json({
+        success: false,
+        message: "Session ID is required",
       });
-    } catch (error) {
-      next(error);
+    }
+
+    // Validate reason if provided
+    if (reason !== undefined && reason !== null) {
+      if (typeof reason !== "string" || reason.length > 1000) {
+        return res.status(400).json({
+          success: false,
+          message: "Reason must be a string with maximum 1000 characters",
+        });
+      }
+    }
+
+    try {
+      await db.query("START TRANSACTION");
+
+      // 1. Verify session exists and student authorization
+      const [sessionRows] = await db.query<RowDataPacket[]>(
+        `SELECT 
+                oos.one_on_one_session_id,
+                oos.student_id,
+                ma.mentor_id,
+                s.user_id as student_user_id,
+                st.transaction_id,
+                st.ucoin_amount,
+                st.status,
+                ma.start_time
+            FROM One_On_One_Sessions oos
+            JOIN Mentor_Availability ma ON oos.availability_id = ma.availability_id
+            JOIN Students s ON oos.student_id = s.student_id
+            JOIN Session_Transactions st ON oos.one_on_one_session_id = st.one_on_one_session_id
+            WHERE oos.one_on_one_session_id = ? AND s.user_id = ?`,
+        [sessionId, studentUserId]
+      );
+
+      if (sessionRows.length === 0) {
+        await db.query("ROLLBACK");
+        return res.status(404).json({
+          success: false,
+          message: "Session not found or not authorized",
+        });
+      }
+
+      const session = sessionRows[0];
+
+      // 2. Check if session is in refundable timeframe
+      const currentTime = new Date();
+      const sessionStartTime = new Date(session.start_time);
+      if (currentTime >= sessionStartTime) {
+        await db.query("ROLLBACK");
+        return res.status(400).json({
+          success: false,
+          message: "Cannot request refund for started or past sessions",
+        });
+      }
+
+      // 3. Check if already refunded
+      if (session.status === "Refunded") {
+        await db.query("ROLLBACK");
+        return res.status(400).json({
+          success: false,
+          message: "Session already refunded",
+        });
+      }
+
+      // 4. Check if refund request already exists
+      const [existingRequest] = await db.query<RowDataPacket[]>(
+        `SELECT request_id FROM Refund_Requests 
+             WHERE one_on_one_session_id = ? AND status = 'Pending'`,
+        [sessionId]
+      );
+
+      if (existingRequest.length > 0) {
+        await db.query("ROLLBACK");
+        return res.status(400).json({
+          success: false,
+          message: "Refund request already pending",
+        });
+      }
+
+      // 5. Create refund request
+      const requestId = crypto.randomUUID();
+      await db.query(
+        `INSERT INTO Refund_Requests 
+             (request_id, one_on_one_session_id, student_id, mentor_id, ucoin_amount, status, reason)
+             VALUES (?, ?, ?, ?, ?, 'Pending', ?)`,
+        [
+          requestId,
+          sessionId,
+          session.student_id,
+          session.mentor_id,
+          session.ucoin_amount,
+          reason || null,
+        ]
+      );
+
+      await db.query("COMMIT");
+
+      res.status(201).json({
+        success: true,
+        message: "Refund request submitted successfully",
+        data: { request_id: requestId, reason: reason || null },
+      });
+    } catch (error: any) {
+      await db.query("ROLLBACK");
+      console.error("Refund request error:", error);
+      res.status(500).json({
+        success: false,
+        message: "Failed to submit refund request",
+        error:
+          process.env.NODE_ENV === "development"
+            ? error.message
+            : "Internal server error",
+      });
     }
   }
 
-  static async getBookedSessionBySessionID(
-    req: AuthenticatedRequest,
-    res: Response,
-    next: NextFunction
-  ): Promise<void> {
+  static async approveRefund(req: AuthenticatedRequest, res: Response) {
+    const mentorUserId = req.user?.user_id;
+    const requestId = req.params.requestId;
+
+    // Input validation
+    if (!mentorUserId) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    if (!requestId) {
+      return res.status(400).json({
+        success: false,
+        message: "Refund request ID is required",
+      });
+    }
+
     try {
-      const bookedId = req.params.bookedId;
+      await db.query("START TRANSACTION");
 
-      if (!bookedId) {
-        res.status(400).json({
-          success: false,
-          message: "Booked session ID is required",
-        });
-        return;
-      }
-
-      // Get session details
-      const [session] = await db.query<RowDataPacket[]>(
+      // 1. Verify refund request and mentor authorization
+      const [requestRows] = await db.query<RowDataPacket[]>(
         `SELECT 
-          student_id,
-          availability_id
-         FROM One_On_One_Sessions
-         WHERE one_on_one_session_id = ?`,
-        [bookedId]
+                rr.request_id,
+                rr.one_on_one_session_id,
+                rr.student_id,
+                rr.mentor_id,
+                rr.ucoin_amount,
+                rr.status,
+                rr.reason,
+                m.user_id as mentor_user_id,
+                s.user_id as student_user_id,
+                ma.start_time
+            FROM Refund_Requests rr
+            JOIN One_On_One_Sessions oos ON rr.one_on_one_session_id = oos.one_on_one_session_id
+            JOIN Mentors m ON rr.mentor_id = m.mentor_id
+            JOIN Students s ON rr.student_id = s.student_id
+            JOIN Mentor_Availability ma ON oos.availability_id = ma.availability_id
+            WHERE rr.request_id = ? AND m.user_id = ?`,
+        [requestId, mentorUserId]
       );
 
-      if (session.length === 0) {
-        res.status(404).json({
+      if (requestRows.length === 0) {
+        await db.query("ROLLBACK");
+        return res.status(404).json({
           success: false,
-          message: "Session not found",
+          message: "Refund request not found or not authorized",
         });
-        return;
       }
+
+      const request = requestRows[0];
+
+      // 2. Check if session has started
+      const currentTime = new Date();
+      const sessionStartTime = new Date(request.start_time);
+      if (currentTime >= sessionStartTime) {
+        await db.query("ROLLBACK");
+        return res.status(400).json({
+          success: false,
+          message: "Cannot approve refund for started or past sessions",
+        });
+      }
+
+      // 3. Check request status
+      if (request.status !== "Pending") {
+        await db.query("ROLLBACK");
+        return res.status(400).json({
+          success: false,
+          message: `Refund request is already ${request.status.toLowerCase()}`,
+        });
+      }
+
+      // 4. Verify mentor has sufficient balance
+      const [mentorBalance] = await db.query<RowDataPacket[]>(
+        `SELECT ucoin_balance FROM User_Balances WHERE user_id = ? FOR UPDATE`,
+        [mentorUserId]
+      );
+
+      if (
+        mentorBalance.length === 0 ||
+        parseFloat(mentorBalance[0].ucoin_balance) < request.ucoin_amount
+      ) {
+        await db.query("ROLLBACK");
+        return res.status(400).json({
+          success: false,
+          message: "Insufficient UCOIN balance to process refund",
+        });
+      }
+
+      // 5. Process refund transaction
+      // Deduct from mentor balance
+      await db.query(
+        `UPDATE User_Balances 
+             SET ucoin_balance = ucoin_balance - ?, last_updated = CURRENT_TIMESTAMP
+             WHERE user_id = ?`,
+        [request.ucoin_amount, mentorUserId]
+      );
+
+      // Add to student balance
+      const [studentBalance] = await db.query<RowDataPacket[]>(
+        `SELECT balance_id FROM User_Balances WHERE user_id = ? FOR UPDATE`,
+        [request.student_user_id]
+      );
+
+      if (studentBalance.length === 0) {
+        const studentBalanceId = crypto.randomUUID();
+        await db.query(
+          `INSERT INTO User_Balances (balance_id, user_id, ucoin_balance)
+                 VALUES (?, ?, ?)`,
+          [studentBalanceId, request.student_user_id, request.ucoin_amount]
+        );
+      } else {
+        await db.query(
+          `UPDATE User_Balances 
+                 SET ucoin_balance = ucoin_balance + ?, last_updated = CURRENT_TIMESTAMP
+                 WHERE user_id = ?`,
+          [request.ucoin_amount, request.student_user_id]
+        );
+      }
+
+      // 6. Update refund request status with processed date
+      await db.query(
+        `UPDATE Refund_Requests 
+             SET status = 'Approved', processed_date = CURRENT_TIMESTAMP
+             WHERE request_id = ?`,
+        [requestId]
+      );
+
+      // 7. Update session transaction status
+      const [transactionRows] = await db.query<RowDataPacket[]>(
+        `SELECT transaction_id FROM Session_Transactions 
+             WHERE one_on_one_session_id = ?`,
+        [request.one_on_one_session_id]
+      );
+
+      if (transactionRows.length > 0) {
+        await db.query(
+          `UPDATE Session_Transactions 
+                 SET status = 'Refunded' 
+                 WHERE transaction_id = ?`,
+          [transactionRows[0].transaction_id]
+        );
+      }
+
+      // 8. Update mentor availability
+      await db.query(
+        `UPDATE Mentor_Availability ma
+             JOIN One_On_One_Sessions oos ON ma.availability_id = oos.availability_id
+             SET ma.is_booked = FALSE, ma.session_id = NULL
+             WHERE oos.one_on_one_session_id = ?`,
+        [request.one_on_one_session_id]
+      );
+
+      // 9. Delete related booked session links
+      await db.query(
+        `DELETE FROM BookedSessionLinks 
+             WHERE one_on_one_session_id = ?`,
+        [request.one_on_one_session_id]
+      );
+
+      // 10. Delete session (sets one_on_one_session_id to NULL in Refund_Requests)
+      await db.query(
+        `DELETE FROM One_On_One_Sessions 
+             WHERE one_on_one_session_id = ?`,
+        [request.one_on_one_session_id]
+      );
+
+      await db.query("COMMIT");
 
       res.status(200).json({
         success: true,
+        message: "Refund approved and processed successfully",
         data: {
-          studentId: session[0].student_id,
-          availabilityId: session[0].availability_id,
+          request_id: request.request_id,
+          reason: request.reason,
+          processed_date: new Date().toISOString(),
         },
       });
-    } catch (error) {
-      next(error);
+    } catch (error: any) {
+      await db.query("ROLLBACK");
+      console.error("Refund approval error:", error);
+      res.status(500).json({
+        success: false,
+        message: "Failed to process refund",
+        error:
+          process.env.NODE_ENV === "development"
+            ? error.message
+            : "Internal server error",
+      });
     }
   }
 
-  // static async updateSessionStatuses() {
-  //   try {
-  //     await db.query("START TRANSACTION");
+  /* Get Transaction History Endpoint */
+  static async getTransactionHistory(req: AuthenticatedRequest, res: Response) {
+    const userId = req.user?.user_id;
 
-  //     // Update Ongoing sessions
-  //     await db.query(
-  //       `UPDATE Mentor_Availability
-  //        SET status = 'Ongoing'
-  //        WHERE is_booked = TRUE
-  //          AND status = 'Upcoming'
-  //          AND start_time <= NOW()
-  //          AND end_time >= NOW()`
-  //     );
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
 
-  //     // Update Completed sessions
-  //     await db.query(
-  //       `UPDATE Mentor_Availability
-  //        SET status = 'Completed'
-  //        WHERE is_booked = TRUE
-  //          AND status IN ('Upcoming', 'Ongoing')
-  //          AND end_time < NOW()`
-  //     );
+    try {
+      // Get purchases
+      const [purchases] = await db.query<RowDataPacket[]>(
+        `SELECT 
+          purchase_id as id,
+          'purchase' as type,
+          tk_amount as amount_currency,
+          ucoin_amount as amount_ucoin,
+          payment_method,
+          status,
+          purchase_date as date,
+          NULL as session_title,
+          NULL as student_name,
+          NULL as mentor_name,
+          NULL as reason,
+          NULL as action_required,
+          NULL as counterpart_name
+        FROM UCOIN_Purchases 
+        WHERE user_id = ?`,
+        [userId]
+      );
 
-  //     // Update Cancelled sessions
-  //     await db.query(
-  //       `UPDATE Mentor_Availability
-  //        SET status = 'Cancelled'
-  //        WHERE is_booked = FALSE
-  //          AND status = 'Upcoming'
-  //          AND end_time < NOW()`
-  //     );
+      // Get session transactions (as student)
+      const [studentTransactions] = await db.query<RowDataPacket[]>(
+        `SELECT 
+          st.transaction_id as id,
+          CASE
+            WHEN st.status = 'Refunded' THEN 'refunded_session'
+            ELSE 'session_payment'
+          END as type,
+          NULL as amount_currency,
+          st.ucoin_amount as amount_ucoin,
+          st.status,
+          st.transaction_date as date,
+          COALESCE(s.session_title, 'Session') as session_title,
+          u_student.name as student_name,
+          u_mentor.name as mentor_name,
+          NULL as reason,
+          CASE
+            WHEN EXISTS (
+              SELECT 1 FROM Refund_Requests rr 
+              WHERE rr.one_on_one_session_id = st.one_on_one_session_id 
+              AND rr.status = 'Pending'
+            ) THEN 'refund_pending'
+            ELSE NULL
+          END as action_required,
+          u_mentor.name as counterpart_name
+        FROM Session_Transactions st
+        JOIN Students std ON st.student_id = std.student_id
+        JOIN Users u_student ON std.user_id = u_student.user_id
+        JOIN Mentors m ON st.mentor_id = m.mentor_id
+        JOIN Users u_mentor ON m.user_id = u_mentor.user_id
+        JOIN One_On_One_Sessions oos ON st.one_on_one_session_id = oos.one_on_one_session_id
+        JOIN Mentor_Availability ma ON oos.availability_id = ma.availability_id
+        LEFT JOIN Sessions s ON ma.session_id = s.session_id
+        WHERE std.user_id = ?`,
+        [userId]
+      );
 
-  //     await db.query("COMMIT");
-  //     console.log("1:1 Session statuses updated successfully");
-  //     return { success: true, message: "1:1 Session statuses updated" };
-  //   } catch (error: any) {
-  //     await db.query("ROLLBACK");
-  //     console.error("Error updating session statuses:", error);
-  //     return { success: false, message: error.message };
-  //   }
-  // }
+      // Get session transactions (as mentor - received payments)
+      const [mentorTransactions] = await db.query<RowDataPacket[]>(
+        `SELECT 
+          st.transaction_id as id,
+          CASE
+            WHEN st.status = 'Refunded' THEN 'refunded_session'
+            ELSE 'session_earning'
+          END as type,
+          NULL as amount_currency,
+          st.ucoin_amount as amount_ucoin,
+          st.status,
+          st.transaction_date as date,
+          COALESCE(s.session_title, 'Session') as session_title,
+          u_student.name as student_name,
+          u_mentor.name as mentor_name,
+          NULL as reason,
+          CASE
+            WHEN EXISTS (
+              SELECT 1 FROM Refund_Requests rr 
+              WHERE rr.one_on_one_session_id = st.one_on_one_session_id 
+              AND rr.status = 'Pending'
+            ) THEN 'refund_review'
+            ELSE NULL
+          END as action_required,
+          u_student.name as counterpart_name
+        FROM Session_Transactions st
+        JOIN Mentors m ON st.mentor_id = m.mentor_id
+        JOIN Users u_mentor ON m.user_id = u_mentor.user_id
+        JOIN Students std ON st.student_id = std.student_id
+        JOIN Users u_student ON std.user_id = u_student.user_id
+        JOIN One_On_One_Sessions oos ON st.one_on_one_session_id = oos.one_on_one_session_id
+        JOIN Mentor_Availability ma ON oos.availability_id = ma.availability_id
+        LEFT JOIN Sessions s ON ma.session_id = s.session_id
+        WHERE m.user_id = ?`,
+        [userId]
+      );
+
+      // Get refund requests (both initiated by student and received by mentor)
+      const [refundRequests] = await db.query<RowDataPacket[]>(
+        `SELECT 
+          rr.request_id as id,
+          CASE 
+            WHEN rr.status = 'Pending' AND std.user_id = ? THEN 'refund_requested'
+            WHEN rr.status = 'Pending' AND m.user_id = ? THEN 'refund_request_received'
+            WHEN rr.status = 'Approved' THEN 'refund_approved'
+            WHEN rr.status = 'Rejected' THEN 'refund_rejected'
+          END as type,
+          NULL as amount_currency,
+          rr.ucoin_amount as amount_ucoin,
+          rr.status,
+          COALESCE(rr.processed_date, rr.request_date) as date,
+          COALESCE(s.session_title, 'Session') as session_title,
+          u_student.name as student_name,
+          u_mentor.name as mentor_name,
+          rr.reason,
+          CASE
+            WHEN rr.status = 'Pending' AND m.user_id = ? THEN 'approval_required'
+            ELSE NULL
+          END as action_required,
+          CASE
+            WHEN std.user_id = ? THEN u_mentor.name
+            ELSE u_student.name
+          END as counterpart_name
+        FROM Refund_Requests rr
+        LEFT JOIN One_On_One_Sessions oos ON rr.one_on_one_session_id = oos.one_on_one_session_id
+        LEFT JOIN Mentor_Availability ma ON oos.availability_id = ma.availability_id
+        LEFT JOIN Sessions s ON ma.session_id = s.session_id
+        JOIN Mentors m ON rr.mentor_id = m.mentor_id
+        JOIN Students std ON rr.student_id = std.student_id
+        JOIN Users u_mentor ON m.user_id = u_mentor.user_id
+        JOIN Users u_student ON std.user_id = u_student.user_id
+        WHERE std.user_id = ? OR m.user_id = ?`,
+        [userId, userId, userId, userId, userId, userId]
+      );
+
+      const transactions = [
+        ...purchases,
+        ...studentTransactions,
+        ...mentorTransactions,
+        ...refundRequests,
+      ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+      res.status(200).json({
+        success: true,
+        message: "Transaction history retrieved successfully",
+        data: transactions,
+      });
+    } catch (error: any) {
+      console.error("Transaction history error:", error);
+      res.status(500).json({
+        success: false,
+        message: "Failed to get transaction history",
+        error:
+          process.env.NODE_ENV === "development"
+            ? error.message
+            : "Internal server error",
+      });
+    }
+  }
 }
-
-// Cron job for status updates (runs every 10 minutes)
-// cron.schedule("*/1 * * * *", async () => {
-//   console.log("Running 1:1 session status update...");
-//   try {
-//     const result = await StudentSessionController.updateSessionStatuses();
-//     console.log("1:1 Session Status update result:", result);
-//   } catch (error) {
-//     console.error("Error in scheduled status update:", error);
-//   }
-// });

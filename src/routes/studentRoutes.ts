@@ -89,11 +89,19 @@ router.get(
   getAllBookedSessions as express.RequestHandler
 );
 
-router.post(
-  "/payment/:sessionID",
-  authenticateToken as express.RequestHandler,
-  requireStudent as express.RequestHandler,
-  StudentSessionController.bookSession as express.RequestHandler
-);
+
+
+
+
+
+
+
+
+// router.post(
+//   "/payment/:sessionID",
+//   authenticateToken as express.RequestHandler,
+//   requireStudent as express.RequestHandler,
+//   StudentSessionController.bookSession as express.RequestHandler
+// );
 
 export default router;

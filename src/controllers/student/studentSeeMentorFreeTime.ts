@@ -89,8 +89,8 @@ class MentorAvailabilityController {
           id: slot.id,
           start: start.toISOString(),
           end: end.toISOString(),
-          booked: slot.is_booked ? [slot.session_id] : [], 
-          medium: medium.length ? medium : ["online"], 
+          booked: slot.is_booked ? [slot.session_id] : [],
+          medium: medium.length ? medium : ["online"],
         };
       });
 
@@ -127,39 +127,30 @@ class MentorAvailabilityController {
     }
 
     try {
-      const [mentorRows] = await pool.execute<RowDataPacket[]>(
-        "SELECT mentor_id FROM Mentors WHERE user_id = ?",
-        [user_id]
-      );
-
-      if (mentorRows.length === 0) {
-        return res.status(403).json({
-          success: false,
-          message: "Only mentors can view availability",
-        });
-      }
-      const mentor_id = mentorRows[0].mentor_id;
-
-      const GET_AVAILABILITY = `
+      // First check if the availability exists and get the mentor_id
+      const GET_AVAILABILITY_WITH_MENTOR = `
         SELECT
-          availability_id, start_time, end_time,
-          is_booked, session_id, is_online, is_offline
-        FROM Mentor_Availability
-        WHERE availability_id = ? AND mentor_id = ?
+          ma.availability_id, ma.start_time, ma.end_time,
+          ma.is_booked, ma.session_id, ma.is_online, ma.is_offline,
+          ma.mentor_id
+        FROM Mentor_Availability ma
+        WHERE ma.availability_id = ?
       `;
 
-      const [rows] = await pool.execute<RowDataPacket[]>(GET_AVAILABILITY, [
-        availabilityID,
-        mentor_id,
-      ]);
-      const availabilityData = rows[0];
+      const [availabilityRows] = await pool.execute<RowDataPacket[]>(
+        GET_AVAILABILITY_WITH_MENTOR,
+        [availabilityID]
+      );
 
-      if (!availabilityData) {
+      if (availabilityRows.length === 0) {
         return res.status(404).json({
           success: false,
-          message: "Availability not found or doesn't belong to you",
+          message: "Availability not found",
         });
       }
+
+      const availabilityData = availabilityRows[0];
+      const mentor_id = availabilityData.mentor_id;
 
       const medium: string[] = [];
       if (availabilityData.is_online) medium.push("online");
