@@ -79,12 +79,4 @@ router
     MentorAvailabilityController.updateAvailability as express.RequestHandler
   );
 
-// C.3 Get Closest Booked Session
-// router.get(
-//   "/booked/closest",
-//   authenticateToken,
-//   requireMentor,
-//   mentorSessionController.getClosestBookedSession
-// );
-
 export default router;

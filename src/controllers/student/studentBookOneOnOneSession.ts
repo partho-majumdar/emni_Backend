@@ -765,7 +765,6 @@ export class StudentSessionController {
     }
   }
 
-  /* Get Transaction History Endpoint */
   static async getTransactionHistory(req: AuthenticatedRequest, res: Response) {
     const userId = req.user?.user_id;
 
@@ -774,6 +773,13 @@ export class StudentSessionController {
     }
 
     try {
+      // Get current balance first
+      const [balanceResult] = await db.query<RowDataPacket[]>(
+        `SELECT ucoin_balance FROM User_Balances WHERE user_id = ?`,
+        [userId]
+      );
+      const currentBalance = balanceResult[0]?.ucoin_balance || 0;
+
       // Get purchases
       const [purchases] = await db.query<RowDataPacket[]>(
         `SELECT 
@@ -789,7 +795,11 @@ export class StudentSessionController {
           NULL as mentor_name,
           NULL as reason,
           NULL as action_required,
-          NULL as counterpart_name
+          NULL as counterpart_name,
+          NULL as one_on_one_session_id,
+          NULL as refund_request_id,
+          NULL as session_start_time,
+          NULL as session_end_time
         FROM UCOIN_Purchases 
         WHERE user_id = ?`,
         [userId]
@@ -807,7 +817,7 @@ export class StudentSessionController {
           st.ucoin_amount as amount_ucoin,
           st.status,
           st.transaction_date as date,
-          COALESCE(s.session_title, 'Session') as session_title,
+          COALESCE(s.session_title, '1:1 Session') as session_title,
           u_student.name as student_name,
           u_mentor.name as mentor_name,
           NULL as reason,
@@ -819,7 +829,13 @@ export class StudentSessionController {
             ) THEN 'refund_pending'
             ELSE NULL
           END as action_required,
-          u_mentor.name as counterpart_name
+          u_mentor.name as counterpart_name,
+          st.one_on_one_session_id,
+          ma.start_time as session_start_time,
+          ma.end_time as session_end_time,
+          (SELECT rr.request_id FROM Refund_Requests rr 
+           WHERE rr.one_on_one_session_id = st.one_on_one_session_id
+           LIMIT 1) as refund_request_id
         FROM Session_Transactions st
         JOIN Students std ON st.student_id = std.student_id
         JOIN Users u_student ON std.user_id = u_student.user_id
@@ -844,7 +860,7 @@ export class StudentSessionController {
           st.ucoin_amount as amount_ucoin,
           st.status,
           st.transaction_date as date,
-          COALESCE(s.session_title, 'Session') as session_title,
+          COALESCE(s.session_title, '1:1 Session') as session_title,
           u_student.name as student_name,
           u_mentor.name as mentor_name,
           NULL as reason,
@@ -856,7 +872,13 @@ export class StudentSessionController {
             ) THEN 'refund_review'
             ELSE NULL
           END as action_required,
-          u_student.name as counterpart_name
+          u_student.name as counterpart_name,
+          st.one_on_one_session_id,
+          ma.start_time as session_start_time,
+          ma.end_time as session_end_time,
+          (SELECT rr.request_id FROM Refund_Requests rr 
+           WHERE rr.one_on_one_session_id = st.one_on_one_session_id
+           LIMIT 1) as refund_request_id
         FROM Session_Transactions st
         JOIN Mentors m ON st.mentor_id = m.mentor_id
         JOIN Users u_mentor ON m.user_id = u_mentor.user_id
@@ -883,7 +905,7 @@ export class StudentSessionController {
           rr.ucoin_amount as amount_ucoin,
           rr.status,
           COALESCE(rr.processed_date, rr.request_date) as date,
-          COALESCE(s.session_title, 'Session') as session_title,
+          COALESCE(s.session_title, '1:1 Session') as session_title,
           u_student.name as student_name,
           u_mentor.name as mentor_name,
           rr.reason,
@@ -894,7 +916,11 @@ export class StudentSessionController {
           CASE
             WHEN std.user_id = ? THEN u_mentor.name
             ELSE u_student.name
-          END as counterpart_name
+          END as counterpart_name,
+          rr.one_on_one_session_id,
+          ma.start_time as session_start_time,
+          ma.end_time as session_end_time,
+          rr.request_id as refund_request_id
         FROM Refund_Requests rr
         LEFT JOIN One_On_One_Sessions oos ON rr.one_on_one_session_id = oos.one_on_one_session_id
         LEFT JOIN Mentor_Availability ma ON oos.availability_id = ma.availability_id
@@ -907,17 +933,82 @@ export class StudentSessionController {
         [userId, userId, userId, userId, userId, userId]
       );
 
-      const transactions = [
+      // Combine all transactions
+      let allTransactions = [
         ...purchases,
         ...studentTransactions,
         ...mentorTransactions,
         ...refundRequests,
       ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
+      // Calculate running balance
+      let runningBalance = currentBalance;
+      const transactionsWithBalance = allTransactions
+        .map((transaction) => {
+          // Determine if this is an incoming or outgoing transaction
+          let balanceChange = 0;
+
+          switch (transaction.type) {
+            case "purchase":
+              if (transaction.status === "Completed") {
+                balanceChange = +transaction.amount_ucoin;
+              }
+              break;
+            case "session_payment":
+              if (transaction.status === "Completed") {
+                balanceChange = -transaction.amount_ucoin;
+              } else if (transaction.status === "Refunded") {
+                balanceChange = +transaction.amount_ucoin;
+              }
+              break;
+            case "session_earning":
+              if (transaction.status === "Completed") {
+                balanceChange = +transaction.amount_ucoin;
+              } else if (transaction.status === "Refunded") {
+                balanceChange = -transaction.amount_ucoin;
+              }
+              break;
+            case "refund_approved":
+              balanceChange = +transaction.amount_ucoin;
+              break;
+            case "refund_requested":
+            case "refund_request_received":
+            case "refund_rejected":
+              // These don't affect balance until approved
+              balanceChange = 0;
+              break;
+          }
+
+          // Calculate balance before this transaction
+          const balanceBefore = runningBalance - balanceChange;
+
+          // Add balance information to transaction
+          const transactionWithBalance = {
+            ...transaction,
+            balance_before: balanceBefore,
+            balance_after: runningBalance,
+          };
+
+          // Update running balance for next iteration (moving backwards through time)
+          runningBalance = balanceBefore;
+
+          return transactionWithBalance;
+        })
+        .reverse(); // Reverse to show oldest first with correct balances
+
+      // Calculate total purchased UCOIN
+      const totalPurchased = purchases
+        .filter((p) => p.status === "Completed")
+        .reduce((sum, purchase) => sum + +purchase.amount_ucoin, 0);
+
       res.status(200).json({
         success: true,
         message: "Transaction history retrieved successfully",
-        data: transactions,
+        data: {
+          transactions: transactionsWithBalance,
+          current_balance: currentBalance,
+          total_purchased: totalPurchased,
+        },
       });
     } catch (error: any) {
       console.error("Transaction history error:", error);

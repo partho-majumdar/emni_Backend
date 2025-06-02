@@ -131,7 +131,7 @@ CREATE TABLE One_On_One_Sessions (
     availability_id CHAR(36) NOT NULL,
     student_id CHAR(36) NOT NULL,
     medium ENUM('online', 'offline') NOT NULL,
-    place VARCHAR(255) DEFAULT NULL,
+    -- place VARCHAR(255) DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT pk_one_on_one_sessions PRIMARY KEY (one_on_one_session_id),
     CONSTRAINT fk_one_on_one_sessions_availability FOREIGN KEY (availability_id) REFERENCES Mentor_Availability(availability_id) ON DELETE CASCADE,
@@ -153,7 +153,7 @@ CREATE TABLE UCOIN_Purchases (
     tk_amount DECIMAL(10, 2) NOT NULL,
     ucoin_amount DECIMAL(15, 2) NOT NULL,
     purchase_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    payment_method ENUM('Bkash', 'Nagad', 'Bank Card', 'Other', 'Rocket') NOT NULL;
+    payment_method ENUM('Bkash', 'Nagad', 'Bank Card', 'Other', 'Rocket') NOT NULL,
     transaction_reference VARCHAR(100) UNIQUE NOT NULL,
     status ENUM('Pending', 'Completed', 'Failed') DEFAULT 'Pending' NOT NULL,
     phone_number VARCHAR(20) NULL, 

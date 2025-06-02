@@ -11,7 +11,7 @@ import { StudentInterestController } from "../controllers/student/interestContro
 import MentorAvailabilityController from "../controllers/student/studentSeeMentorFreeTime";
 import { StudentSessionController } from "../controllers/student/studentBookOneOnOneSession";
 import { getSuggestedMentorsInterestBased } from "../controllers/student/mentorSuggestionController";
-import { getAllBookedSessions } from "../controllers/student/studentAllBookedSessions";
+import StudentBookSessionController from "../controllers/student/studentAllBookedSessions";
 
 const router = Router();
 
@@ -71,7 +71,7 @@ router
 router
   .get(
     "/mavaliableat/:mentorId",
-    authenticateToken as express.RequestHandler,  
+    authenticateToken as express.RequestHandler,
     requireStudent as express.RequestHandler,
     MentorAvailabilityController.getMentorAvailability as express.RequestHandler
   )
@@ -82,26 +82,18 @@ router
     MentorAvailabilityController.getAvailabilityById as express.RequestHandler
   );
 
-router.get(
-  "/booked/:studentID",
-  authenticateToken as express.RequestHandler,
-  requireStudent as express.RequestHandler,
-  getAllBookedSessions as express.RequestHandler
-);
-
-
-
-
-
-
-
-
-
-// router.post(
-//   "/payment/:sessionID",
-//   authenticateToken as express.RequestHandler,
-//   requireStudent as express.RequestHandler,
-//   StudentSessionController.bookSession as express.RequestHandler
-// );
+router
+  .get(
+    "/booked/s/all",
+    authenticateToken as express.RequestHandler,
+    requireStudent as express.RequestHandler,
+    StudentBookSessionController.getAllBookedSessionsForStudent as express.RequestHandler
+  )
+  .get(
+    "/booked/:studentID",
+    authenticateToken as express.RequestHandler,
+    requireStudent as express.RequestHandler,
+    StudentBookSessionController.getAllBookedSessions as express.RequestHandler
+  );
 
 export default router;

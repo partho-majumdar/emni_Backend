@@ -8,6 +8,17 @@ interface AuthenticatedRequest extends Request {
   user?: { user_id: string; user_type: string; email?: string };
 }
 
+interface BookedSessionType {
+  session_type: string;
+  start: Date;
+  end: Date;
+  sessionId: string;
+  medium: string;
+  session_title: string;
+  student_name: string;
+  student_email: string;
+}
+
 interface AvailabilityInput {
   startTime: string;
   endTime: string;
@@ -24,73 +35,73 @@ interface AvailabilityResponse {
 
 export class MentorAvailabilityController {
   static async addAvailability(req: AuthenticatedRequest, res: Response) {
-  const user_id = req.user?.user_id;
-  const { startTime, endTime, medium } = req.body as AvailabilityInput;
+    const user_id = req.user?.user_id;
+    const { startTime, endTime, medium } = req.body as AvailabilityInput;
 
-  if (!user_id) {
-    return res.status(401).json({ message: "Unauthorized: No user ID" });
-  }
-
-  if (
-    !startTime ||
-    !endTime ||
-    !medium ||
-    !Array.isArray(medium) ||
-    medium.length === 0
-  ) {
-    return res
-      .status(400)
-      .json({ message: "Missing or invalid required fields" });
-  }
-
-  const isOnline = medium.includes("online");
-  const isOffline = medium.includes("offline");
-  if (!isOnline && !isOffline) {
-    return res
-      .status(400)
-      .json({ message: "Medium must include 'online' or 'offline'" });
-  }
-
-  try {
-    const startDate = new Date(startTime);
-    const endDate = new Date(endTime);
-
-    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
-      return res.status(400).json({ message: "Invalid date format" });
+    if (!user_id) {
+      return res.status(401).json({ message: "Unauthorized: No user ID" });
     }
 
-    // Format for database (MySQL DATETIME in UTC)
-    const dbStartTime = startDate
-      .toISOString()
-      .slice(0, 19)
-      .replace("T", " ");
-    const dbEndTime = endDate.toISOString().slice(0, 19).replace("T", " ");
+    if (
+      !startTime ||
+      !endTime ||
+      !medium ||
+      !Array.isArray(medium) ||
+      medium.length === 0
+    ) {
+      return res
+        .status(400)
+        .json({ message: "Missing or invalid required fields" });
+    }
 
-    console.log("Input startTime:", startTime);
-    console.log("Input endTime:", endTime);
-    console.log("Stored start_time (UTC):", dbStartTime);
-    console.log("Stored end_time (UTC):", dbEndTime);
+    const isOnline = medium.includes("online");
+    const isOffline = medium.includes("offline");
+    if (!isOnline && !isOffline) {
+      return res
+        .status(400)
+        .json({ message: "Medium must include 'online' or 'offline'" });
+    }
 
-    const connection = await pool.getConnection();
     try {
-      await connection.beginTransaction();
+      const startDate = new Date(startTime);
+      const endDate = new Date(endTime);
 
-      // Check if user is a mentor
-      const [mentorRows] = await connection.execute(
-        "SELECT mentor_id FROM Mentors WHERE user_id = ?",
-        [user_id]
-      );
-      const mentor = (mentorRows as any[])[0];
-      if (!mentor) {
-        await connection.rollback();
-        return res
-          .status(403)
-          .json({ message: "Only mentors can add availability" });
+      if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+        return res.status(400).json({ message: "Invalid date format" });
       }
-      const mentor_id = mentor.mentor_id;
 
-      // Check for overlapping availability
-      const CHECK_OVERLAP = `
+      // Format for database (MySQL DATETIME in UTC)
+      const dbStartTime = startDate
+        .toISOString()
+        .slice(0, 19)
+        .replace("T", " ");
+      const dbEndTime = endDate.toISOString().slice(0, 19).replace("T", " ");
+
+      console.log("Input startTime:", startTime);
+      console.log("Input endTime:", endTime);
+      console.log("Stored start_time (UTC):", dbStartTime);
+      console.log("Stored end_time (UTC):", dbEndTime);
+
+      const connection = await pool.getConnection();
+      try {
+        await connection.beginTransaction();
+
+        // Check if user is a mentor
+        const [mentorRows] = await connection.execute(
+          "SELECT mentor_id FROM Mentors WHERE user_id = ?",
+          [user_id]
+        );
+        const mentor = (mentorRows as any[])[0];
+        if (!mentor) {
+          await connection.rollback();
+          return res
+            .status(403)
+            .json({ message: "Only mentors can add availability" });
+        }
+        const mentor_id = mentor.mentor_id;
+
+        // Check for overlapping availability
+        const CHECK_OVERLAP = `
         SELECT COUNT(*) as overlap_count
         FROM Mentor_Availability
         WHERE mentor_id = ?
@@ -100,66 +111,66 @@ export class MentorAvailabilityController {
           (start_time >= ? AND end_time <= ?)
         )
       `;
-      const [overlapRows] = await connection.execute(CHECK_OVERLAP, [
-        mentor_id,
-        dbEndTime,
-        dbStartTime,
-        dbEndTime,
-        dbStartTime,
-        dbStartTime,
-        dbEndTime,
-      ]);
+        const [overlapRows] = await connection.execute(CHECK_OVERLAP, [
+          mentor_id,
+          dbEndTime,
+          dbStartTime,
+          dbEndTime,
+          dbStartTime,
+          dbStartTime,
+          dbEndTime,
+        ]);
 
-      const overlapCount = (overlapRows as any[])[0].overlap_count;
-      if (overlapCount > 0) {
-        await connection.rollback();
-        return res
-          .status(400)
-          .json({ message: "Availability overlaps with existing schedule" });
-      }
+        const overlapCount = (overlapRows as any[])[0].overlap_count;
+        if (overlapCount > 0) {
+          await connection.rollback();
+          return res
+            .status(400)
+            .json({ message: "Availability overlaps with existing schedule" });
+        }
 
-      // Insert new availability
-      const availability_id = uuidv4();
-      const INSERT_AVAILABILITY = `
+        // Insert new availability
+        const availability_id = uuidv4();
+        const INSERT_AVAILABILITY = `
         INSERT INTO Mentor_Availability (
           availability_id, mentor_id, is_online, is_offline, 
           start_time, end_time, is_booked, session_id
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `;
-      await connection.execute(INSERT_AVAILABILITY, [
-        availability_id,
-        mentor_id,
-        isOnline ? 1 : 0,
-        isOffline ? 1 : 0,
-        dbStartTime,
-        dbEndTime,
-        false,
-        null,
-      ]);
+        await connection.execute(INSERT_AVAILABILITY, [
+          availability_id,
+          mentor_id,
+          isOnline ? 1 : 0,
+          isOffline ? 1 : 0,
+          dbStartTime,
+          dbEndTime,
+          false,
+          null,
+        ]);
 
-      await connection.commit();
+        await connection.commit();
 
-      // Return the newly created availability
-      const newAvailability = {
-        id: availability_id,
-        start: startTime,
-        end: endTime,
-        medium: medium,
-        booked: false,
-      };
+        // Return the newly created availability
+        const newAvailability = {
+          id: availability_id,
+          start: startTime,
+          end: endTime,
+          medium: medium,
+          booked: false,
+        };
 
-      res.status(201).json({ success: true, data: newAvailability });
+        res.status(201).json({ success: true, data: newAvailability });
+      } catch (error) {
+        await connection.rollback();
+        console.error("Add availability error:", error);
+        res.status(500).json({ message: "Server error" });
+      } finally {
+        connection.release();
+      }
     } catch (error) {
-      await connection.rollback();
-      console.error("Add availability error:", error);
-      res.status(500).json({ message: "Server error" });
-    } finally {
-      connection.release();
+      console.error("Date parsing error:", error);
+      res.status(400).json({ message: "Invalid date/time format" });
     }
-  } catch (error) {
-    console.error("Date parsing error:", error);
-    res.status(400).json({ message: "Invalid date/time format" });
-  }
   }
 
   static async getAvailabilities(req: AuthenticatedRequest, res: Response) {
@@ -179,9 +190,10 @@ export class MentorAvailabilityController {
       );
 
       if (mentorRows.length === 0) {
-        return res
-          .status(403)
-          .json({ success: false, message: "Only mentors can view availability" });
+        return res.status(403).json({
+          success: false,
+          message: "Only mentors can view availability",
+        });
       }
       const mentor_id = mentorRows[0].mentor_id;
 
@@ -193,7 +205,9 @@ export class MentorAvailabilityController {
         WHERE mentor_id = ?
         ORDER BY start_time
       `;
-      const [rows] = await pool.execute<RowDataPacket[]>(GET_AVAILABILITIES, [mentor_id]);
+      const [rows] = await pool.execute<RowDataPacket[]>(GET_AVAILABILITIES, [
+        mentor_id,
+      ]);
 
       const availabilities = rows.map((row): AvailabilityResponse => {
         const start = new Date(row.start_time).toISOString();
@@ -309,17 +323,25 @@ export class MentorAvailabilityController {
       const updateValues: any[] = [];
 
       // Handle startTime
-      const newStartTime = startTime ? new Date(startTime) : new Date(availability.start_time);
+      const newStartTime = startTime
+        ? new Date(startTime)
+        : new Date(availability.start_time);
       if (startTime) {
         updateFields.push("start_time = ?");
-        updateValues.push(newStartTime.toISOString().slice(0, 19).replace('T', ' '));
+        updateValues.push(
+          newStartTime.toISOString().slice(0, 19).replace("T", " ")
+        );
       }
 
       // Handle endTime
-      const newEndTime = endTime ? new Date(endTime) : new Date(availability.end_time);
+      const newEndTime = endTime
+        ? new Date(endTime)
+        : new Date(availability.end_time);
       if (endTime) {
         updateFields.push("end_time = ?");
-        updateValues.push(newEndTime.toISOString().slice(0, 19).replace('T', ' '));
+        updateValues.push(
+          newEndTime.toISOString().slice(0, 19).replace("T", " ")
+        );
       }
 
       // Validate time range
@@ -343,23 +365,27 @@ export class MentorAvailabilityController {
           (start_time >= ? AND end_time <= ?)
         )
       `;
-      const [overlapRows] = await connection.execute<RowDataPacket[]>(CHECK_OVERLAP, [
-        mentor_id,
-        availability_id,
-        newEndTime.toISOString().slice(0, 19).replace('T', ' '),
-        newStartTime.toISOString().slice(0, 19).replace('T', ' '),
-        newEndTime.toISOString().slice(0, 19).replace('T', ' '),
-        newStartTime.toISOString().slice(0, 19).replace('T', ' '),
-        newStartTime.toISOString().slice(0, 19).replace('T', ' '),
-        newEndTime.toISOString().slice(0, 19).replace('T', ' '),
-      ]);
+      const [overlapRows] = await connection.execute<RowDataPacket[]>(
+        CHECK_OVERLAP,
+        [
+          mentor_id,
+          availability_id,
+          newEndTime.toISOString().slice(0, 19).replace("T", " "),
+          newStartTime.toISOString().slice(0, 19).replace("T", " "),
+          newEndTime.toISOString().slice(0, 19).replace("T", " "),
+          newStartTime.toISOString().slice(0, 19).replace("T", " "),
+          newStartTime.toISOString().slice(0, 19).replace("T", " "),
+          newEndTime.toISOString().slice(0, 19).replace("T", " "),
+        ]
+      );
 
       const overlapCount = overlapRows[0].overlap_count;
       if (overlapCount > 0) {
         await connection.rollback();
-        return res
-          .status(400)
-          .json({ success: false, message: "Availability overlaps with existing schedule" });
+        return res.status(400).json({
+          success: false,
+          message: "Availability overlaps with existing schedule",
+        });
       }
 
       // Handle medium (is_online, is_offline)
@@ -452,17 +478,19 @@ export class MentorAvailabilityController {
     const user_id = req.user?.user_id;
     const { availability_id } = req.params;
 
-    console.log(`Attempting to delete availability_id: ${availability_id} for user_id: ${user_id}`);
+    console.log(
+      `Attempting to delete availability_id: ${availability_id} for user_id: ${user_id}`
+    );
 
     if (!user_id) {
-      console.error('No user_id found in request');
+      console.error("No user_id found in request");
       return res
         .status(401)
         .json({ success: false, message: "Unauthorized: No user ID" });
     }
 
     if (!availability_id) {
-      console.error('No availability_id provided in request');
+      console.error("No availability_id provided in request");
       return res
         .status(400)
         .json({ success: false, message: "Availability ID is required" });
@@ -498,7 +526,9 @@ export class MentorAvailabilityController {
       );
 
       if (availabilityRows.length === 0) {
-        console.error(`No availability found for availability_id: ${availability_id} and mentor_id: ${mentor_id}`);
+        console.error(
+          `No availability found for availability_id: ${availability_id} and mentor_id: ${mentor_id}`
+        );
         await connection.rollback();
         return res.status(404).json({
           success: false,
@@ -545,7 +575,9 @@ export class MentorAvailabilityController {
       await connection.commit();
 
       if (deleteResult.affectedRows === 0) {
-        console.error(`No rows deleted for availability_id: ${availability_id}`);
+        console.error(
+          `No rows deleted for availability_id: ${availability_id}`
+        );
         return res.status(404).json({
           success: false,
           message: "Availability not found",
@@ -558,7 +590,10 @@ export class MentorAvailabilityController {
         message: "Availability deleted successfully",
       });
     } catch (error) {
-      console.error(`Delete availability error for availability_id: ${availability_id}`, error);
+      console.error(
+        `Delete availability error for availability_id: ${availability_id}`,
+        error
+      );
       await connection.rollback();
       res.status(500).json({
         success: false,
@@ -567,6 +602,75 @@ export class MentorAvailabilityController {
       });
     } finally {
       connection.release();
+    }
+  }
+
+  static async getAllBookedSessionsForMentor(
+    req: AuthenticatedRequest,
+    res: Response
+  ) {
+    const mentorUserId = req.user?.user_id;
+
+    if (!mentorUserId) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    try {
+      const [mentorRows] = await pool.query<RowDataPacket[]>(
+        `SELECT mentor_id FROM Mentors WHERE user_id = ?`,
+        [mentorUserId]
+      );
+
+      if (mentorRows.length === 0) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Mentor not found" });
+      }
+      const mentorId = mentorRows[0].mentor_id;
+
+      const [bookedSessions] = await pool.query<RowDataPacket[]>(
+        `
+      SELECT 
+        oos.one_on_one_session_id AS sessionId,
+        ma.start_time AS start,
+        ma.end_time AS end,
+        oos.medium,
+        s.session_title,
+        u_student.name AS student_name,
+        u_student.email AS student_email
+      FROM One_On_One_Sessions oos
+      JOIN Mentor_Availability ma ON oos.availability_id = ma.availability_id
+      JOIN Sessions s ON ma.session_id = s.session_id
+      JOIN Students st ON oos.student_id = st.student_id
+      JOIN Users u_student ON st.user_id = u_student.user_id
+      WHERE ma.mentor_id = ?
+      `,
+        [mentorId]
+      );
+
+      const formattedSessions: BookedSessionType[] = bookedSessions.map(
+        (session) => ({
+          session_type: "1:1",
+          start: new Date(session.start),
+          end: new Date(session.end),
+          sessionId: session.sessionId,
+          medium: session.medium,
+          session_title: session.session_title,
+          student_name: session.student_name,
+          student_email: session.student_email,
+        })
+      );
+
+      res.json({
+        success: true,
+        data: formattedSessions,
+      });
+    } catch (error) {
+      console.error("Error fetching mentor booked sessions:", error);
+      res.status(500).json({
+        success: false,
+        message: "Failed to retrieve booked sessions",
+      });
     }
   }
 }

@@ -129,6 +129,12 @@ router
     authenticateToken as express.RequestHandler,
     requireMentorOrStudent as express.RequestHandler,
     OneOnOneSessionLinkController.getBookedSessionBySessionID as express.RequestHandler
+  )
+  .get(
+    "/booked/m/all",
+    authenticateToken as express.RequestHandler,
+    requireMentor as express.RequestHandler,
+    OneOnOneSessionLinkController.getBookedOneOnOneSessions as express.RequestHandler
   );
 
 export default router;
