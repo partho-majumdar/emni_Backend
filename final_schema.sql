@@ -100,6 +100,26 @@ CREATE TABLE Mentor_Availability (
     CONSTRAINT fk_mentor_availability_session FOREIGN KEY (session_id) REFERENCES Sessions(session_id) ON DELETE SET NULL
 );
 
+CREATE TABLE One_On_One_Sessions (
+    one_on_one_session_id CHAR(36) DEFAULT (UUID()) NOT NULL,
+    availability_id CHAR(36) NOT NULL,
+    student_id CHAR(36) NOT NULL,
+    medium ENUM('online', 'offline') NOT NULL,
+    -- place VARCHAR(255) DEFAULT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_one_on_one_sessions PRIMARY KEY (one_on_one_session_id),
+    CONSTRAINT fk_one_on_one_sessions_availability FOREIGN KEY (availability_id) REFERENCES Mentor_Availability(availability_id) ON DELETE CASCADE,
+    CONSTRAINT fk_one_on_one_sessions_student FOREIGN KEY (student_id) REFERENCES Students(student_id) ON DELETE CASCADE,
+    CONSTRAINT uq_one_on_one_sessions UNIQUE (availability_id, student_id)
+);
+
+CREATE TABLE BookedSessionLinks(
+  one_on_one_session_id CHAR(36) DEFAULT (UUID()) NOT NULL,
+  link VARCHAR(255) NOT NULL,
+  CONSTRAINT fk_one_on_one_session_id FOREIGN KEY (one_on_one_session_id) REFERENCES One_On_One_Sessions (one_on_one_session_id) ON DELETE CASCADE
+);
+
+
 CREATE TABLE Group_Sessions (
     group_session_id CHAR(36) DEFAULT (UUID()) NOT NULL,
     mentor_id CHAR(36) NOT NULL,
@@ -126,27 +146,6 @@ CREATE TABLE Group_Session_Participants (
     CONSTRAINT fk_group_session_participants_student FOREIGN KEY (student_id) REFERENCES Students(student_id) ON DELETE CASCADE
 );
 
-CREATE TABLE One_On_One_Sessions (
-    one_on_one_session_id CHAR(36) DEFAULT (UUID()) NOT NULL,
-    availability_id CHAR(36) NOT NULL,
-    student_id CHAR(36) NOT NULL,
-    medium ENUM('online', 'offline') NOT NULL,
-    -- place VARCHAR(255) DEFAULT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT pk_one_on_one_sessions PRIMARY KEY (one_on_one_session_id),
-    CONSTRAINT fk_one_on_one_sessions_availability FOREIGN KEY (availability_id) REFERENCES Mentor_Availability(availability_id) ON DELETE CASCADE,
-    CONSTRAINT fk_one_on_one_sessions_student FOREIGN KEY (student_id) REFERENCES Students(student_id) ON DELETE CASCADE,
-    CONSTRAINT uq_one_on_one_sessions UNIQUE (availability_id, student_id)
-);
-
-CREATE TABLE BookedSessionLinks(
-  one_on_one_session_id CHAR(36) DEFAULT (UUID()) NOT NULL,
-  link VARCHAR(255) NOT NULL,
-  CONSTRAINT fk_one_on_one_session_id FOREIGN KEY (one_on_one_session_id) REFERENCES One_On_One_Sessions (one_on_one_session_id) ON DELETE CASCADE
-);
-
-------------------------------------------------
-
 CREATE TABLE UCOIN_Purchases (
     purchase_id CHAR(36) DEFAULT (UUID()) NOT NULL,
     user_id CHAR(36) NOT NULL,
@@ -164,7 +163,6 @@ CREATE TABLE UCOIN_Purchases (
     CONSTRAINT chk_positive_ucoin CHECK (ucoin_amount > 0)
 );
 
--- Unchanged: Tracks UCOIN balances for users (students and mentors)
 CREATE TABLE User_Balances (
     balance_id CHAR(36) DEFAULT (UUID()) NOT NULL,
     user_id CHAR(36) NOT NULL,
@@ -175,7 +173,6 @@ CREATE TABLE User_Balances (
     CONSTRAINT chk_positive_balance CHECK (ucoin_balance >= 0)
 );
 
--- Unchanged: Tracks UCOIN transactions for 1:1 session bookings
 CREATE TABLE Session_Transactions (
     transaction_id CHAR(36) DEFAULT (UUID()) NOT NULL,
     one_on_one_session_id CHAR(36) NOT NULL,
@@ -209,96 +206,129 @@ CREATE TABLE Refund_Requests (
     CONSTRAINT fk_refund_requests_mentor FOREIGN KEY (mentor_id) 
         REFERENCES Mentors(mentor_id) ON DELETE CASCADE
 );
----------------------------------------------------------------------
+
+CREATE TABLE Posts (
+    post_id CHAR(36) DEFAULT (UUID()) NOT NULL,
+    user_id CHAR(36) NOT NULL,
+    content TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    CONSTRAINT pk_posts PRIMARY KEY (post_id),
+    CONSTRAINT fk_posts_user FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE
+);
+
+CREATE TABLE Polls (
+    poll_id CHAR(36) DEFAULT (UUID()) NOT NULL,
+    user_id CHAR(36) NOT NULL,
+    question TEXT NOT NULL,
+    end_time TIMESTAMP NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    CONSTRAINT pk_polls PRIMARY KEY (poll_id),
+    CONSTRAINT fk_polls_user FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE
+);
+
+CREATE TABLE Poll_Options (
+    option_id CHAR(36) DEFAULT (UUID()) NOT NULL,
+    poll_id CHAR(36) NOT NULL,
+    option_text VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    CONSTRAINT pk_poll_options PRIMARY KEY (option_id),
+    CONSTRAINT fk_poll_options_poll FOREIGN KEY (poll_id) REFERENCES Polls(poll_id) ON DELETE CASCADE
+);
+
+CREATE TABLE Poll_Votes (
+    vote_id CHAR(36) DEFAULT (UUID()) NOT NULL,
+    poll_id CHAR(36) NOT NULL,
+    option_id CHAR(36) NOT NULL,
+    user_id CHAR(36) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    CONSTRAINT pk_poll_votes PRIMARY KEY (vote_id),
+    CONSTRAINT fk_poll_votes_poll FOREIGN KEY (poll_id) REFERENCES Polls(poll_id) ON DELETE CASCADE,
+    CONSTRAINT fk_poll_votes_option FOREIGN KEY (option_id) REFERENCES Poll_Options(option_id) ON DELETE CASCADE,
+    CONSTRAINT fk_poll_votes_user FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE,
+    CONSTRAINT uq_poll_votes_user_poll UNIQUE (user_id, poll_id)
+);
+
+CREATE TABLE Hashtags (
+    hashtag_id CHAR(36) DEFAULT (UUID()) NOT NULL,
+    hashtag_name VARCHAR(100) UNIQUE NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    CONSTRAINT pk_hashtags PRIMARY KEY (hashtag_id)
+);
+
+CREATE TABLE Content_Hashtags (
+    content_type ENUM('Post', 'Poll') NOT NULL,
+    content_id CHAR(36) NOT NULL,
+    hashtag_id CHAR(36) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    CONSTRAINT pk_content_hashtags PRIMARY KEY (content_type, content_id, hashtag_id),
+    CONSTRAINT fk_content_hashtags_hashtag FOREIGN KEY (hashtag_id) REFERENCES Hashtags(hashtag_id) ON DELETE CASCADE
+);
+
+CREATE TABLE Comments (
+    comment_id CHAR(36) DEFAULT (UUID()) NOT NULL,
+    user_id CHAR(36) NOT NULL,
+    post_id CHAR(36) NULL,
+    parent_comment_id CHAR(36) NULL,
+    content TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    CONSTRAINT pk_comments PRIMARY KEY (comment_id),
+    CONSTRAINT fk_comments_user FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE,
+    CONSTRAINT fk_comments_post FOREIGN KEY (post_id) REFERENCES Posts(post_id) ON DELETE CASCADE,
+    CONSTRAINT fk_comments_parent FOREIGN KEY (parent_comment_id) REFERENCES Comments(comment_id) ON DELETE CASCADE,
+    CONSTRAINT chk_parent_comment_logic CHECK (
+        (parent_comment_id IS NULL AND post_id IS NOT NULL)
+        OR
+        (parent_comment_id IS NOT NULL AND post_id IS NULL)
+    )
+);
+
+CREATE TABLE Reactions (
+    reaction_id CHAR(36) DEFAULT (UUID()) NOT NULL,
+    user_id CHAR(36) NOT NULL,
+    post_id CHAR(36) NULL,
+    comment_id CHAR(36) NULL,
+    reaction_type ENUM('Love') NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    CONSTRAINT pk_reactions PRIMARY KEY (reaction_id),
+    CONSTRAINT fk_reactions_user FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE,
+    CONSTRAINT fk_reactions_post FOREIGN KEY (post_id) REFERENCES Posts(post_id) ON DELETE CASCADE,
+    CONSTRAINT fk_reactions_comment FOREIGN KEY (comment_id) REFERENCES Comments(comment_id) ON DELETE CASCADE,
+    CONSTRAINT chk_post_or_comment CHECK (post_id IS NOT NULL XOR comment_id IS NOT NULL),
+    CONSTRAINT uq_reaction_user_post UNIQUE (user_id, post_id),
+    CONSTRAINT uq_reaction_user_comment UNIQUE (user_id, comment_id)
+);
 
 
-
-
-
-
-
----------------------------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------------
 
 CREATE TABLE Reviews (
     review_id CHAR(36) DEFAULT (UUID()) NOT NULL,
-    reviewer_id CHAR(36) NOT NULL,
-    review_text TEXT NULL,
+    student_id CHAR(36) NOT NULL,
+    mentor_id CHAR(36) NOT NULL,
     rating INT NOT NULL CHECK (rating BETWEEN 1 AND 5),
+    review_text TEXT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
     CONSTRAINT pk_reviews PRIMARY KEY (review_id),
-    CONSTRAINT fk_reviews_reviewer FOREIGN KEY (reviewer_id) REFERENCES Students(student_id) ON DELETE CASCADE
+    CONSTRAINT fk_reviews_student FOREIGN KEY (student_id) REFERENCES Students(student_id) ON DELETE CASCADE,
+    CONSTRAINT fk_reviews_mentor FOREIGN KEY (mentor_id) REFERENCES Mentors(mentor_id) ON DELETE CASCADE
 );
 
--- For 1:1 session reviews
 CREATE TABLE One_On_One_Reviews (
     review_id CHAR(36) NOT NULL,
     one_on_one_session_id CHAR(36) NOT NULL,
     CONSTRAINT pk_one_on_one_reviews PRIMARY KEY (review_id),
     CONSTRAINT fk_one_on_one_reviews_review FOREIGN KEY (review_id) REFERENCES Reviews(review_id) ON DELETE CASCADE,
     CONSTRAINT fk_one_on_one_reviews_session FOREIGN KEY (one_on_one_session_id) REFERENCES One_On_One_Sessions(one_on_one_session_id) ON DELETE CASCADE,
-    CONSTRAINT uq_one_on_one_session_review UNIQUE (one_on_one_session_id)
+    CONSTRAINT uq_one_on_one_session UNIQUE (one_on_one_session_id)
 );
 
--- For group session reviews
 CREATE TABLE Group_Session_Reviews (
     review_id CHAR(36) NOT NULL,
     group_session_id CHAR(36) NOT NULL,
     CONSTRAINT pk_group_session_reviews PRIMARY KEY (review_id),
     CONSTRAINT fk_group_session_reviews_review FOREIGN KEY (review_id) REFERENCES Reviews(review_id) ON DELETE CASCADE,
     CONSTRAINT fk_group_session_reviews_session FOREIGN KEY (group_session_id) REFERENCES Group_Sessions(group_session_id) ON DELETE CASCADE,
-    CONSTRAINT uq_group_session_student_review UNIQUE (group_session_id, reviewer_id)
+    CONSTRAINT uq_group_session_student UNIQUE (group_session_id, student_id)
 );
 
--- 1. User Wallet Table --
-CREATE TABLE User_Wallets (
-    wallet_id CHAR(36) DEFAULT (UUID()) NOT NULL,
-    user_id CHAR(36) NOT NULL UNIQUE,
-    ucoin_balance DECIMAL(12,2) NOT NULL DEFAULT 0.00,
-    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    CONSTRAINT pk_wallet_id PRIMARY KEY (wallet_id),
-    CONSTRAINT fk_wallet_user FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE,
-    CONSTRAINT chk_positive_balance CHECK (ucoin_balance >= 0)
-);
-
--- UCOIN Recharge 
-
--- UCOIN Transaction
-CREATE TABLE UCOIN_Transactions (
-    transaction_id CHAR(36) DEFAULT (UUID()),
-    wallet_id CHAR(36) NOT NULL,
-    session_id CHAR(36) NOT NULL,
-    amount DECIMAL(12,2) NOT NULL,
-    transaction_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    status ENUM('PENDING', 'COMPLETED', 'FAILED', 'REFUNDED') DEFAULT 'COMPLETED',
-    CONSTRAINT pk_ucoin_transactions PRIMARY KEY (transaction_id),
-    CONSTRAINT fk_transaction_wallet FOREIGN KEY (wallet_id) REFERENCES User_Wallets(wallet_id),
-    CONSTRAINT fk_transaction_session FOREIGN KEY (session_id) REFERENCES One_On_One_Sessions(one_on_one_session_id),
-    CONSTRAINT chk_positive_amount CHECK (amount > 0),
-    CONSTRAINT chk_valid_balance CHECK (balance_after >= 0)
-);
-
--- Blog/Project Showcase 
-CREATE TABLE Posts (
-    post_id CHAR(36) DEFAULT (UUID()) NOT NULL,
-    user_id CHAR(36) NOT NULL,
-    title VARCHAR(255) NOT NULL,
-    content TEXT NOT NULL,
-    post_type ENUM('Blog', 'Project') NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    CONSTRAINT pk_posts PRIMARY KEY (post_id),
-    CONSTRAINT fk_posts_user FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE
-);
-
--- Comments 
-CREATE TABLE Comments (
-    comment_id CHAR(36) DEFAULT (UUID()) NOT NULL,
-    post_id CHAR(36) NOT NULL,
-    user_id CHAR(36) NOT NULL,
-    parent_comment_id CHAR(36) NULL, 
-    content TEXT NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    CONSTRAINT pk_comments PRIMARY KEY (comment_id),
-    CONSTRAINT fk_comments_post FOREIGN KEY (post_id) REFERENCES Posts(post_id) ON DELETE CASCADE,
-    CONSTRAINT fk_comments_user FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE,
-    CONSTRAINT fk_comments_parent FOREIGN KEY (parent_comment_id) REFERENCES Comments(comment_id) ON DELETE SET NULL
-);
+-------------------------------------------------------------------------------------------------
