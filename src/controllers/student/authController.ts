@@ -442,6 +442,7 @@ export class StudentAuthController {
         u.username,
         u.gender,
         u.dob,
+        u.user_type,
         u.graduation_year,
         u.image_url,
         s.student_id,
@@ -460,8 +461,7 @@ export class StudentAuthController {
         return res.status(404).json({ message: "Student profile not found" });
       }
 
-      const baseUrl = "https://evidently-handy-troll.ngrok-free.app";
-      // const baseUrl = "http://localhost:3000";
+      const baseUrl = "http://localhost:3000";
       const image_link = profileData.image_url
         ? `${baseUrl}/api/student/image/${profileData.student_id}`
         : "";
@@ -470,6 +470,7 @@ export class StudentAuthController {
         name: profileData.name || "",
         email: profileData.email || "",
         username: profileData.username || "",
+        user_type: profileData.user_type || "",
         gender: profileData.gender,
         grad_year: profileData.graduation_year
           ? profileData.graduation_year.toString()

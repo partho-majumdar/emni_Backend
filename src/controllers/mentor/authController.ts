@@ -36,6 +36,7 @@ interface MentorInfoType {
   name: string;
   email: string;
   username: string;
+  user_type?: "Mentor" | "Student" | "Admin";
   gender: "Male" | "Female" | null;
   bio: string;
   grad_year: string;
@@ -332,6 +333,7 @@ export class MentorAuthController {
           u.name,
           u.email,
           u.username,
+          u.user_type,
           u.gender,
           u.dob,
           u.graduation_year,
@@ -382,6 +384,7 @@ export class MentorAuthController {
         name: profileData.name || "",
         email: profileData.email || "",
         username: profileData.username || "",
+        user_type: profileData.user_type || "",
         gender: profileData.gender,
         bio: profileData.bio || "",
         grad_year: profileData.graduation_year
@@ -418,6 +421,7 @@ export class MentorAuthController {
           u.name,
           u.email,
           u.username,
+          u.user_type,
           u.gender,
           u.dob,
           u.graduation_year,
@@ -456,8 +460,7 @@ export class MentorAuthController {
         if (social.platform === "Facebook") socials.facebook = social.url || "";
       }
 
-      const baseUrl = "https://evidently-handy-troll.ngrok-free.app";
-      // const baseUrl = "http://localhost:3000";
+      const baseUrl = "http://localhost:3000";
       const image_link = profileData.image_url
         ? `${baseUrl}/api/mentor/image/${profileData.mentor_id}`
         : "";
@@ -466,6 +469,7 @@ export class MentorAuthController {
         name: profileData.name || "",
         email: profileData.email || "",
         username: profileData.username || "",
+        user_type: profileData.user_type || "",
         gender: profileData.gender,
         bio: profileData.bio || "",
         grad_year: profileData.graduation_year
