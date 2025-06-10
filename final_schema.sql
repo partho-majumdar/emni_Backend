@@ -318,8 +318,7 @@ CREATE TABLE One_On_One_Reviews (
     one_on_one_session_id CHAR(36) NOT NULL,
     CONSTRAINT pk_one_on_one_reviews PRIMARY KEY (review_id),
     CONSTRAINT fk_one_on_one_reviews_review FOREIGN KEY (review_id) REFERENCES Reviews(review_id) ON DELETE CASCADE,
-    CONSTRAINT fk_one_on_one_reviews_session FOREIGN KEY (one_on_one_session_id) REFERENCES One_On_One_Sessions(one_on_one_session_id) ON DELETE CASCADE,
-    CONSTRAINT uq_one_on_one_session UNIQUE (one_on_one_session_id)
+    CONSTRAINT fk_one_on_one_reviews_session FOREIGN KEY (one_on_one_session_id) REFERENCES One_On_One_Sessions(one_on_one_session_id) ON DELETE CASCADE
 );
 
 CREATE TABLE Group_Session_Reviews (
@@ -327,8 +326,7 @@ CREATE TABLE Group_Session_Reviews (
     group_session_id CHAR(36) NOT NULL,
     CONSTRAINT pk_group_session_reviews PRIMARY KEY (review_id),
     CONSTRAINT fk_group_session_reviews_review FOREIGN KEY (review_id) REFERENCES Reviews(review_id) ON DELETE CASCADE,
-    CONSTRAINT fk_group_session_reviews_session FOREIGN KEY (group_session_id) REFERENCES Group_Sessions(group_session_id) ON DELETE CASCADE,
-    CONSTRAINT uq_group_session_student UNIQUE (group_session_id, student_id)
+    CONSTRAINT fk_group_session_reviews_session FOREIGN KEY (group_session_id) REFERENCES Group_Sessions(group_session_id) ON DELETE CASCADE
 );
 
 -------------------------------------------------------------------------------------------------

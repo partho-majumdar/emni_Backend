@@ -5,6 +5,7 @@ import {
   requireStudent,
   requireAnyAuthenticated,
   requireMentorOrStudent,
+  requireMentor,
 } from "../middleware/auth";
 
 import { StudentInterestController } from "../controllers/student/interestController";
@@ -12,6 +13,7 @@ import MentorAvailabilityController from "../controllers/student/studentSeeMento
 import { StudentSessionController } from "../controllers/student/studentBookOneOnOneSession";
 import { getSuggestedMentorsInterestBased } from "../controllers/student/mentorSuggestionController";
 import StudentBookSessionController from "../controllers/student/studentAllBookedSessions";
+import { ReviewController } from "../controllers/student/studentGiveReviews";
 
 const router = Router();
 
@@ -94,6 +96,33 @@ router
     authenticateToken as express.RequestHandler,
     requireStudent as express.RequestHandler,
     StudentBookSessionController.getAllBookedSessions as express.RequestHandler
+  );
+
+// Review routes
+router
+  .post(
+    "/review/one-on-one/:one_on_one_session_id",
+    authenticateToken as express.RequestHandler,
+    requireStudent as express.RequestHandler,
+    ReviewController.createOneOnOneReview as express.RequestHandler
+  )
+  .post(
+    "/review/group/:group_session_id",
+    authenticateToken as express.RequestHandler,
+    requireStudent as express.RequestHandler,
+    ReviewController.createGroupSessionReview as express.RequestHandler
+  )
+  .get(
+    "/review/one-on-one/:one_on_one_session_id",
+    authenticateToken as express.RequestHandler,
+    requireMentorOrStudent as express.RequestHandler,
+    ReviewController.getOneOnOneSessionReview as express.RequestHandler
+  )
+  .get(
+    "/review/group/:group_session_id",
+    authenticateToken as express.RequestHandler,
+    requireMentorOrStudent as express.RequestHandler,
+    ReviewController.getGroupSessionReviews as express.RequestHandler
   );
 
 export default router;

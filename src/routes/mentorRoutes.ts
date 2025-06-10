@@ -8,6 +8,7 @@ import {
 } from "../middleware/auth";
 import { MentorInterestController } from "../controllers/mentor/interestController";
 import { MentorAvailabilityController } from "../controllers/mentor/mentorTimeController";
+import { ReviewController } from "../controllers/student/studentGiveReviews";
 
 const router = Router();
 
@@ -78,5 +79,12 @@ router
     requireMentor as express.RequestHandler,
     MentorAvailabilityController.updateAvailability as express.RequestHandler
   );
+
+// router.get(
+//   "/reviews/:mentor_id",
+//   authenticateToken as express.RequestHandler,
+//   requireMentor as express.RequestHandler,
+//   ReviewController.getMentorReviews as express.RequestHandler
+// );
 
 export default router;
