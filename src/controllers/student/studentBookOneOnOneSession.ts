@@ -580,10 +580,12 @@ export class StudentSessionController {
 
     // Input validation
     if (!mentorUserId) {
+      console.error("Unauthorized: No mentor user ID provided");
       return res.status(401).json({ success: false, message: "Unauthorized" });
     }
 
     if (!requestId) {
+      console.error("Invalid input: No refund request ID provided");
       return res.status(400).json({
         success: false,
         message: "Refund request ID is required",
@@ -596,27 +598,32 @@ export class StudentSessionController {
       // 1. Verify refund request and mentor authorization
       const [requestRows] = await db.query<RowDataPacket[]>(
         `SELECT 
-                rr.request_id,
-                rr.one_on_one_session_id,
-                rr.student_id,
-                rr.mentor_id,
-                rr.ucoin_amount,
-                rr.status,
-                rr.reason,
-                m.user_id as mentor_user_id,
-                s.user_id as student_user_id,
-                ma.start_time
-            FROM Refund_Requests rr
-            JOIN One_On_One_Sessions oos ON rr.one_on_one_session_id = oos.one_on_one_session_id
-            JOIN Mentors m ON rr.mentor_id = m.mentor_id
-            JOIN Students s ON rr.student_id = s.student_id
-            JOIN Mentor_Availability ma ON oos.availability_id = ma.availability_id
-            WHERE rr.request_id = ? AND m.user_id = ?`,
+        rr.request_id,
+        rr.one_on_one_session_id,
+        rr.student_id,
+        rr.mentor_id,
+        rr.ucoin_amount,
+        rr.status,
+        rr.reason,
+        m.user_id as mentor_user_id,
+        s.user_id as student_user_id,
+        ma.start_time,
+        st.ucoin_amount as transaction_ucoin_amount
+      FROM Refund_Requests rr
+      JOIN One_On_One_Sessions oos ON rr.one_on_one_session_id = oos.one_on_one_session_id
+      JOIN Mentors m ON rr.mentor_id = m.mentor_id
+      JOIN Students s ON rr.student_id = s.student_id
+      JOIN Mentor_Availability ma ON oos.availability_id = ma.availability_id
+      JOIN Session_Transactions st ON oos.one_on_one_session_id = st.one_on_one_session_id
+      WHERE rr.request_id = ? AND m.user_id = ?`,
         [requestId, mentorUserId]
       );
 
       if (requestRows.length === 0) {
         await db.query("ROLLBACK");
+        console.error(
+          `Refund request ${requestId} not found or mentor ${mentorUserId} not authorized`
+        );
         return res.status(404).json({
           success: false,
           message: "Refund request not found or not authorized",
@@ -624,56 +631,97 @@ export class StudentSessionController {
       }
 
       const request = requestRows[0];
+      console.log(
+        `Processing refund request ${requestId}: Amount=${request.ucoin_amount}, TransactionAmount=${request.transaction_ucoin_amount}`
+      );
 
-      // 2. Check if session has started
+      // 2. Validate refund amount against transaction
+      if (
+        parseFloat(request.ucoin_amount) !==
+        parseFloat(request.transaction_ucoin_amount)
+      ) {
+        await db.query("ROLLBACK");
+        console.error(
+          `Refund amount mismatch for request ${requestId}: Refund=${request.ucoin_amount}, Transaction=${request.transaction_ucoin_amount}`
+        );
+        return res.status(400).json({
+          success: false,
+          message: "Refund amount does not match session transaction amount",
+        });
+      }
+
+      // 3. Check if session has started
       const currentTime = new Date();
       const sessionStartTime = new Date(request.start_time);
       if (currentTime >= sessionStartTime) {
         await db.query("ROLLBACK");
+        console.error(
+          `Refund request ${requestId} denied: Session started at ${request.start_time}`
+        );
         return res.status(400).json({
           success: false,
           message: "Cannot approve refund for started or past sessions",
         });
       }
 
-      // 3. Check request status
+      // 4. Check request status
       if (request.status !== "Pending") {
         await db.query("ROLLBACK");
+        console.error(
+          `Refund request ${requestId} already processed: Status=${request.status}`
+        );
         return res.status(400).json({
           success: false,
           message: `Refund request is already ${request.status.toLowerCase()}`,
         });
       }
 
-      // 4. Verify mentor has sufficient balance
+      // 5. Verify mentor has sufficient balance
       const [mentorBalance] = await db.query<RowDataPacket[]>(
-        `SELECT ucoin_balance FROM User_Balances WHERE user_id = ? FOR UPDATE`,
+        `SELECT balance_id, ucoin_balance FROM User_Balances WHERE user_id = ? FOR UPDATE`,
         [mentorUserId]
       );
 
-      if (
-        mentorBalance.length === 0 ||
-        parseFloat(mentorBalance[0].ucoin_balance) < request.ucoin_amount
-      ) {
+      if (mentorBalance.length === 0) {
         await db.query("ROLLBACK");
-        return res.status(400).json({
+        console.error(`No balance found for mentor ${mentorUserId}`);
+        return res.status(500).json({
           success: false,
-          message: "Insufficient UCOIN balance to process refund",
+          message: "Mentor balance record not found",
         });
       }
 
-      // 5. Process refund transaction
+      const mentorUcoinBalance = parseFloat(mentorBalance[0].ucoin_balance);
+      const refundAmount = parseFloat(request.ucoin_amount);
+      console.log(
+        `Mentor ${mentorUserId} balance check: Available=${mentorUcoinBalance}, Required=${refundAmount}`
+      );
+
+      if (mentorUcoinBalance < refundAmount) {
+        await db.query("ROLLBACK");
+        console.error(
+          `Insufficient balance for refund request ${requestId}: Available=${mentorUcoinBalance}, Required=${refundAmount}`
+        );
+        return res.status(400).json({
+          success: false,
+          message: `Insufficient UCOIN balance to process refund. Available: ${mentorUcoinBalance.toFixed(
+            2
+          )}, Required: ${refundAmount.toFixed(2)}`,
+        });
+      }
+
+      // 6. Process refund transaction
       // Deduct from mentor balance
       await db.query(
         `UPDATE User_Balances 
-             SET ucoin_balance = ucoin_balance - ?, last_updated = CURRENT_TIMESTAMP
-             WHERE user_id = ?`,
-        [request.ucoin_amount, mentorUserId]
+       SET ucoin_balance = ucoin_balance - ?, last_updated = CURRENT_TIMESTAMP
+       WHERE user_id = ?`,
+        [refundAmount, mentorUserId]
       );
 
       // Add to student balance
       const [studentBalance] = await db.query<RowDataPacket[]>(
-        `SELECT balance_id FROM User_Balances WHERE user_id = ? FOR UPDATE`,
+        `SELECT balance_id, ucoin_balance FROM User_Balances WHERE user_id = ? FOR UPDATE`,
         [request.student_user_id]
       );
 
@@ -681,66 +729,76 @@ export class StudentSessionController {
         const studentBalanceId = crypto.randomUUID();
         await db.query(
           `INSERT INTO User_Balances (balance_id, user_id, ucoin_balance)
-                 VALUES (?, ?, ?)`,
-          [studentBalanceId, request.student_user_id, request.ucoin_amount]
+         VALUES (?, ?, ?)`,
+          [studentBalanceId, request.student_user_id, refundAmount]
+        );
+        console.log(
+          `Created new balance for student ${request.student_user_id}: ${refundAmount}`
         );
       } else {
         await db.query(
           `UPDATE User_Balances 
-                 SET ucoin_balance = ucoin_balance + ?, last_updated = CURRENT_TIMESTAMP
-                 WHERE user_id = ?`,
-          [request.ucoin_amount, request.student_user_id]
+         SET ucoin_balance = ucoin_balance + ?, last_updated = CURRENT_TIMESTAMP
+         WHERE user_id = ?`,
+          [refundAmount, request.student_user_id]
+        );
+        console.log(
+          `Updated student ${request.student_user_id} balance: +${refundAmount}`
         );
       }
 
-      // 6. Update refund request status with processed date
+      // 7. Update refund request status with processed date
       await db.query(
         `UPDATE Refund_Requests 
-             SET status = 'Approved', processed_date = CURRENT_TIMESTAMP
-             WHERE request_id = ?`,
+       SET status = 'Approved', processed_date = CURRENT_TIMESTAMP
+       WHERE request_id = ?`,
         [requestId]
       );
 
-      // 7. Update session transaction status
+      // 8. Update session transaction status
       const [transactionRows] = await db.query<RowDataPacket[]>(
         `SELECT transaction_id FROM Session_Transactions 
-             WHERE one_on_one_session_id = ?`,
+       WHERE one_on_one_session_id = ?`,
         [request.one_on_one_session_id]
       );
 
       if (transactionRows.length > 0) {
         await db.query(
           `UPDATE Session_Transactions 
-                 SET status = 'Refunded' 
-                 WHERE transaction_id = ?`,
+         SET status = 'Refunded' 
+         WHERE transaction_id = ?`,
           [transactionRows[0].transaction_id]
+        );
+        console.log(
+          `Updated transaction ${transactionRows[0].transaction_id} to Refunded`
         );
       }
 
-      // 8. Update mentor availability
+      // 9. Update mentor availability
       await db.query(
         `UPDATE Mentor_Availability ma
-             JOIN One_On_One_Sessions oos ON ma.availability_id = oos.availability_id
-             SET ma.is_booked = FALSE, ma.session_id = NULL
-             WHERE oos.one_on_one_session_id = ?`,
+       JOIN One_On_One_Sessions oos ON ma.availability_id = oos.availability_id
+       SET ma.is_booked = FALSE, ma.session_id = NULL
+       WHERE oos.one_on_one_session_id = ?`,
         [request.one_on_one_session_id]
       );
 
-      // 9. Delete related booked session links
+      // 10. Delete related booked session links
       await db.query(
         `DELETE FROM BookedSessionLinks 
-             WHERE one_on_one_session_id = ?`,
+       WHERE one_on_one_session_id = ?`,
         [request.one_on_one_session_id]
       );
 
-      // 10. Delete session (sets one_on_one_session_id to NULL in Refund_Requests)
+      // 11. Delete session (sets one_on_one_session_id to NULL in Refund_Requests)
       await db.query(
         `DELETE FROM One_On_One_Sessions 
-             WHERE one_on_one_session_id = ?`,
+       WHERE one_on_one_session_id = ?`,
         [request.one_on_one_session_id]
       );
 
       await db.query("COMMIT");
+      console.log(`Refund request ${requestId} approved successfully`);
 
       res.status(200).json({
         success: true,
@@ -753,7 +811,7 @@ export class StudentSessionController {
       });
     } catch (error: any) {
       await db.query("ROLLBACK");
-      console.error("Refund approval error:", error);
+      console.error(`Refund approval error for request ${requestId}:`, error);
       res.status(500).json({
         success: false,
         message: "Failed to process refund",

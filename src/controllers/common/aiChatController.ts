@@ -18,7 +18,7 @@ interface AIChatMessage {
 
 export class AIChatController {
   private static genAI = new GoogleGenerativeAI(
-    "AIzaSyA6K54E-IkkviKB_YFJ3oKW47jVsrLb1Ck"
+    process.env.GOOGLE_AI_API_KEY || ""
   );
 
   // Start or continue AI conversation using studentId
