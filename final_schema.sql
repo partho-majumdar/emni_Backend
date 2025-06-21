@@ -298,9 +298,6 @@ CREATE TABLE Reactions (
     CONSTRAINT uq_reaction_user_comment UNIQUE (user_id, comment_id)
 );
 
-
--------------------------------------------------------------------------------------------------
-
 CREATE TABLE Reviews (
     review_id CHAR(36) DEFAULT (UUID()) NOT NULL,
     student_id CHAR(36) NOT NULL,
@@ -329,4 +326,58 @@ CREATE TABLE Group_Session_Reviews (
     CONSTRAINT fk_group_session_reviews_session FOREIGN KEY (group_session_id) REFERENCES Group_Sessions(group_session_id) ON DELETE CASCADE
 );
 
--------------------------------------------------------------------------------------------------
+CREATE TABLE Conversations (
+    conversation_id CHAR(36) DEFAULT (UUID()) NOT NULL,
+    student_id CHAR(36) NOT NULL,
+    mentor_id CHAR(36) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    last_message_at TIMESTAMP NULL,
+    CONSTRAINT pk_conversations PRIMARY KEY (conversation_id),
+    CONSTRAINT fk_conversations_student FOREIGN KEY (student_id) REFERENCES Students(student_id) ON DELETE CASCADE,
+    CONSTRAINT fk_conversations_mentor FOREIGN KEY (mentor_id) REFERENCES Mentors(mentor_id) ON DELETE CASCADE,
+    CONSTRAINT uq_student_mentor_conversation UNIQUE (student_id, mentor_id)
+);
+
+CREATE TABLE Messages (
+    message_id CHAR(36) DEFAULT (UUID()) NOT NULL,
+    conversation_id CHAR(36) NOT NULL,
+    sender_id CHAR(36) NOT NULL,
+    message_text TEXT NOT NULL,
+    is_deleted BOOLEAN DEFAULT FALSE NOT NULL, 
+    sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    CONSTRAINT pk_messages PRIMARY KEY (message_id),
+    CONSTRAINT fk_messages_conversation FOREIGN KEY (conversation_id) REFERENCES Conversations(conversation_id) ON DELETE CASCADE,
+    CONSTRAINT fk_messages_sender FOREIGN KEY (sender_id) REFERENCES Users(user_id) ON DELETE CASCADE
+);
+
+CREATE TABLE Message_Read_Status (
+    status_id CHAR(36) DEFAULT (UUID()) NOT NULL,
+    message_id CHAR(36) NOT NULL,
+    user_id CHAR(36) NOT NULL,
+    is_read BOOLEAN DEFAULT FALSE NOT NULL,
+    read_at TIMESTAMP NULL,
+    CONSTRAINT pk_message_read_status PRIMARY KEY (status_id),
+    CONSTRAINT fk_message_read_status_message FOREIGN KEY (message_id) REFERENCES Messages(message_id) ON DELETE CASCADE,
+    CONSTRAINT fk_message_read_status_user FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE,
+    CONSTRAINT uq_message_user_status UNIQUE (message_id, user_id)
+);
+
+CREATE TABLE AI_Conversations (
+    conversation_id CHAR(36) DEFAULT (UUID()) NOT NULL,
+    user_id CHAR(36) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    CONSTRAINT pk_ai_conversations PRIMARY KEY (conversation_id),
+    CONSTRAINT fk_ai_conversations_user FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE
+);
+
+CREATE TABLE AI_Chat_Messages (
+    message_id CHAR(36) DEFAULT (UUID()) NOT NULL,
+    conversation_id CHAR(36) NOT NULL,
+    user_id CHAR(36) NOT NULL,
+    message_text TEXT NOT NULL,
+    is_from_ai BOOLEAN NOT NULL DEFAULT FALSE,
+    sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    CONSTRAINT pk_ai_chat_messages PRIMARY KEY (message_id),
+    CONSTRAINT fk_ai_chat_messages_conversation FOREIGN KEY (conversation_id) REFERENCES AI_Conversations(conversation_id) ON DELETE CASCADE,
+    CONSTRAINT fk_ai_chat_messages_user FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE,
+);

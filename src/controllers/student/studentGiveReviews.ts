@@ -499,4 +499,223 @@ export class ReviewController {
         .json({ message: "Server error", error: (error as any).message });
     }
   }
+
+  static async getMentorReviews(req: AuthenticatedRequest, res: Response) {
+    try {
+      const user = req.user;
+      const { mentor_id } = req.params;
+
+      if (!user || !user.user_id) {
+        return res.status(401).json({ message: "Unauthorized: No user data" });
+      }
+
+      if (!mentor_id) {
+        return res.status(400).json({ message: "Mentor ID is required" });
+      }
+
+      // Verify mentor exists and user is authorized
+      const FIND_MENTOR = `
+        SELECT user_id FROM Mentors WHERE mentor_id = ?
+      `;
+      const [mentorRows] = await pool.execute(FIND_MENTOR, [mentor_id]);
+      const mentor = (mentorRows as { user_id: string }[])[0];
+
+      if (!mentor) {
+        return res.status(404).json({ message: "Mentor not found" });
+      }
+
+      if (mentor.user_id !== user.user_id && user.user_type !== "Admin") {
+        return res.status(403).json({
+          message: "Not authorized to view this mentor's reviews",
+        });
+      }
+
+      // Fetch one-on-one sessions grouped by session_title, description, and mentor_id
+      const GET_ONE_ON_ONE_SESSIONS = `
+        SELECT 
+          s.session_id,
+          s.session_title,
+          s.description,
+          s.duration_mins,
+          s.type AS session_type,
+          MIN(o.created_at) AS session_created_at,
+          MIN(a.start_time) AS start_time,
+          MIN(a.end_time) AS end_time,
+          o.medium
+        FROM One_On_One_Sessions o
+        JOIN Mentor_Availability a ON o.availability_id = a.availability_id
+        JOIN Sessions s ON a.session_id = s.session_id
+        WHERE a.mentor_id = ?
+        GROUP BY s.session_id, s.session_title, s.description, s.mentor_id, s.duration_mins, s.type, o.medium
+      `;
+      const [oneOnOneRows] = await pool.execute(GET_ONE_ON_ONE_SESSIONS, [
+        mentor_id,
+      ]);
+
+      const oneOnOneSessions = oneOnOneRows as {
+        session_id: string;
+        session_title: string;
+        description: string;
+        duration_mins: number;
+        session_type: string;
+        session_created_at: Date;
+        start_time: Date;
+        end_time: Date;
+        medium: string;
+      }[];
+
+      const oneOnOneReviewsPromises = oneOnOneSessions.map(async (session) => {
+        const GET_REVIEWS = `
+          SELECT 
+            r.review_id,
+            r.student_id,
+            r.mentor_id,
+            r.rating,
+            r.review_text,
+            r.created_at,
+            u.username,
+            u.user_type,
+            u.name AS student_name,
+            u.email AS student_email
+          FROM One_On_One_Reviews o
+          JOIN Reviews r ON o.review_id = r.review_id
+          JOIN Users u ON (
+            SELECT user_id FROM Students WHERE student_id = r.student_id
+          ) = u.user_id
+          JOIN One_On_One_Sessions os ON o.one_on_one_session_id = os.one_on_one_session_id
+          JOIN Mentor_Availability a ON os.availability_id = a.availability_id
+          JOIN Sessions s ON a.session_id = s.session_id
+          WHERE s.session_id = ? AND s.mentor_id = ?
+        `;
+        const [reviewRows] = await pool.execute(GET_REVIEWS, [
+          session.session_id,
+          mentor_id,
+        ]);
+        const reviews = (reviewRows as Review[]).map((review) => ({
+          ...review,
+          created_at: review.created_at.toISOString(),
+        }));
+        return {
+          session: {
+            session_id: session.session_id,
+            session_type: "one_on_one",
+            session_title: session.session_title,
+            type: session.session_type,
+            start_time: session.start_time.toISOString(),
+            end_time: session.end_time.toISOString(),
+            duration_mins: session.duration_mins,
+            description: session.description,
+            medium: session.medium,
+            created_at: session.session_created_at.toISOString(),
+          },
+          reviews,
+        };
+      });
+
+      const oneOnOneResults = await Promise.all(oneOnOneReviewsPromises);
+
+      // Fetch group sessions and their reviews
+      const GET_GROUP_SESSIONS = `
+        SELECT 
+          g.group_session_id,
+          g.title AS session_title,
+          g.description,
+          g.session_date,
+          g.duration_mins,
+          g.max_participants,
+          g.platform,
+          g.status
+        FROM Group_Sessions g
+        WHERE g.mentor_id = ?
+      `;
+      const [groupRows] = await pool.execute(GET_GROUP_SESSIONS, [mentor_id]);
+
+      const groupSessions = groupRows as {
+        group_session_id: string;
+        session_title: string;
+        description: string;
+        session_date: Date;
+        duration_mins: number;
+        max_participants: number;
+        platform: string;
+        status: string;
+      }[];
+
+      const groupReviewsPromises = groupSessions.map(async (session) => {
+        const GET_REVIEWS = `
+          SELECT 
+            r.review_id,
+            r.student_id,
+            r.mentor_id,
+            r.rating,
+            r.review_text,
+            r.created_at,
+            u.username,
+            u.user_type,
+            u.name AS student_name,
+            u.email AS student_email
+          FROM Group_Session_Reviews g
+          JOIN Reviews r ON g.review_id = r.review_id
+          JOIN Users u ON (
+            SELECT user_id FROM Students WHERE student_id = r.student_id
+          ) = u.user_id
+          WHERE g.group_session_id = ?
+        `;
+        const [reviewRows] = await pool.execute(GET_REVIEWS, [
+          session.group_session_id,
+        ]);
+        const reviews = (reviewRows as Review[]).map((review) => ({
+          ...review,
+          created_at: review.created_at.toISOString(),
+        }));
+        return {
+          session: {
+            session_id: session.group_session_id,
+            session_type: "group",
+            session_title: session.session_title,
+            start_time: session.session_date.toISOString(),
+            end_time: new Date(
+              new Date(session.session_date).getTime() +
+                session.duration_mins * 60000
+            ).toISOString(),
+            duration_mins: session.duration_mins,
+            description: session.description,
+            platform: session.platform,
+            max_participants: session.max_participants,
+            status: session.status,
+          },
+          reviews,
+        };
+      });
+
+      const groupResults = await Promise.all(groupReviewsPromises);
+
+      // Calculate overall average rating
+      const GET_AVG_RATING = `
+        SELECT AVG(rating) as average_rating
+        FROM Reviews
+        WHERE mentor_id = ?
+      `;
+      const [avgRows] = await pool.execute(GET_AVG_RATING, [mentor_id]);
+      const avgRatingResult = (
+        avgRows as { average_rating: string | number | null }[]
+      )[0].average_rating;
+      const average_rating =
+        avgRatingResult !== null ? Number(avgRatingResult) : 0;
+
+      res.status(200).json({
+        success: true,
+        data: {
+          mentor_id,
+          average_rating: parseFloat(average_rating.toFixed(2)),
+          sessions: [...oneOnOneResults, ...groupResults],
+        },
+      });
+    } catch (error) {
+      console.error("Get mentor reviews error:", error);
+      res
+        .status(500)
+        .json({ message: "Server error", error: (error as any).message });
+    }
+  }
 }

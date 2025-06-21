@@ -9,6 +9,7 @@ import {
 import { MentorInterestController } from "../controllers/mentor/interestController";
 import { MentorAvailabilityController } from "../controllers/mentor/mentorTimeController";
 import { ReviewController } from "../controllers/student/studentGiveReviews";
+import { getMentorDetails, getAllMentors } from "../controllers/student/mentorSuggestionController";
 
 const router = Router();
 
@@ -80,11 +81,23 @@ router
     MentorAvailabilityController.updateAvailability as express.RequestHandler
   );
 
-// router.get(
-//   "/reviews/:mentor_id",
-//   authenticateToken as express.RequestHandler,
-//   requireMentor as express.RequestHandler,
-//   ReviewController.getMentorReviews as express.RequestHandler
-// );
+router
+  .get(
+    "/reviews/:mentor_id",
+    authenticateToken as express.RequestHandler,
+    requireMentorOrStudent as express.RequestHandler,
+    ReviewController.getMentorReviews as express.RequestHandler
+  )
+  .get(
+    "/findmentor/details/:mentor_id",
+    authenticateToken as express.RequestHandler,
+    requireMentorOrStudent as express.RequestHandler,
+    getMentorDetails as express.RequestHandler
+  )
+  .get("/findmentor/all/other",
+    authenticateToken as express.RequestHandler,
+    requireMentorOrStudent as express.RequestHandler,
+    getAllMentors as express.RequestHandler
+  );
 
 export default router;

@@ -11,23 +11,29 @@ import {
 import { StudentInterestController } from "../controllers/student/interestController";
 import MentorAvailabilityController from "../controllers/student/studentSeeMentorFreeTime";
 import { StudentSessionController } from "../controllers/student/studentBookOneOnOneSession";
-import { getSuggestedMentorsInterestBased } from "../controllers/student/mentorSuggestionController";
+import {
+  getNonMatchingMentors,
+  getSuggestedMentorsInterestBased,
+} from "../controllers/student/mentorSuggestionController";
 import StudentBookSessionController from "../controllers/student/studentAllBookedSessions";
 import { ReviewController } from "../controllers/student/studentGiveReviews";
+import { AIChatController } from "../controllers/common/aiChatController";
 
 const router = Router();
 
-router.get(
-  "/findmentor/interest",
-  authenticateToken as express.RequestHandler,
-  requireStudent as express.RequestHandler,
-  getSuggestedMentorsInterestBased as express.RequestHandler
-);
-
-// router.get(
-//   "/all",
-//   StudentAuthController.getAllStudents as express.RequestHandler
-// );
+router
+  .get(
+    "/findmentor/interest",
+    authenticateToken as express.RequestHandler,
+    requireStudent as express.RequestHandler,
+    getSuggestedMentorsInterestBased as express.RequestHandler
+  )
+  .get(
+    "/findmentor/other",
+    authenticateToken as express.RequestHandler,
+    requireStudent as express.RequestHandler,
+    getNonMatchingMentors as express.RequestHandler
+  );
 
 router
   .post("/register", StudentAuthController.register as express.RequestHandler)
@@ -123,6 +129,20 @@ router
     authenticateToken as express.RequestHandler,
     requireMentorOrStudent as express.RequestHandler,
     ReviewController.getGroupSessionReviews as express.RequestHandler
+  );
+
+router
+  .get(
+    "/ai-chat/student/:studentId",
+    authenticateToken as express.RequestHandler,
+    requireStudent as express.RequestHandler,
+    AIChatController.startOrContinueAIConversation as express.RequestHandler
+  )
+  .post(
+    "/ai-chat/student/send/:studentId",
+    authenticateToken as express.RequestHandler,
+    requireStudent as express.RequestHandler,
+    AIChatController.sendAIMessage as express.RequestHandler
   );
 
 export default router;

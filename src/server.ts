@@ -6,6 +6,7 @@ import adminRoutes from "./routes/adminRoutes";
 import sessionsRoutes from "./routes/sessionsRoutes";
 import newsFeedRoutes from "./routes/newsFeedRoutes";
 import groupSessionsRoutes from "./routes/groupsessionsRoutes";
+import messageRoutes from "./routes/messageRoutes";
 import { getAllInterests } from "./controllers/common/interestController";
 import { AdminAuthController } from "./controllers/admin/authController";
 
@@ -28,6 +29,8 @@ app.use("/api/group-sessions", groupSessionsRoutes);
 app.use("/api/news-feed", newsFeedRoutes);
 
 app.get("/api/interests", getAllInterests);
+
+app.use("/api/messages", messageRoutes);
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
