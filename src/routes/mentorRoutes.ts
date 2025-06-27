@@ -9,7 +9,11 @@ import {
 import { MentorInterestController } from "../controllers/mentor/interestController";
 import { MentorAvailabilityController } from "../controllers/mentor/mentorTimeController";
 import { ReviewController } from "../controllers/student/studentGiveReviews";
-import { getMentorDetails, getAllMentors } from "../controllers/student/mentorSuggestionController";
+import {
+  getMentorDetails,
+  getAllMentors,
+} from "../controllers/student/mentorSuggestionController";
+import { MentorJobController } from "../controllers/mentor/mentorJobsController";
 
 const router = Router();
 
@@ -94,10 +98,76 @@ router
     requireMentorOrStudent as express.RequestHandler,
     getMentorDetails as express.RequestHandler
   )
-  .get("/findmentor/all/other",
+  .get(
+    "/findmentor/all/other",
     authenticateToken as express.RequestHandler,
     requireMentorOrStudent as express.RequestHandler,
     getAllMentors as express.RequestHandler
+  );
+
+// Job posting routes
+router
+  .post(
+    "/jobs",
+    authenticateToken as express.RequestHandler,
+    requireMentorOrStudent as express.RequestHandler,
+    MentorJobController.createJobPost as express.RequestHandler
+  )
+  .put(
+    "/jobs/:job_id",
+    authenticateToken as express.RequestHandler,
+    requireMentorOrStudent as express.RequestHandler,
+    MentorJobController.updateJobPost as express.RequestHandler
+  )
+  .delete(
+    "/jobs/:job_id",
+    authenticateToken as express.RequestHandler,
+    requireMentorOrStudent as express.RequestHandler,
+    MentorJobController.deleteJobPost as express.RequestHandler
+  );
+
+// Job application routes
+router
+  .get(
+    "/jobs/:job_id/applications",
+    authenticateToken as express.RequestHandler,
+    requireMentorOrStudent as express.RequestHandler,
+    MentorJobController.getJobApplications as express.RequestHandler
+  )
+  .put(
+    "/jobs/:job_id/applications/:application_id",
+    authenticateToken as express.RequestHandler,
+    requireMentorOrStudent as express.RequestHandler,
+    MentorJobController.updateApplicationStatus as express.RequestHandler
+  );
+
+// Job completion
+router.post(
+  "/jobs/:job_id/complete",
+  authenticateToken as express.RequestHandler,
+  requireMentorOrStudent as express.RequestHandler,
+  MentorJobController.completeJob as express.RequestHandler
+);
+
+// Job listing routes
+router
+  .get(
+    "/jobs/my-jobs",
+    authenticateToken as express.RequestHandler,
+    requireMentorOrStudent as express.RequestHandler,
+    MentorJobController.getMyPostedJobs as express.RequestHandler
+  )
+  .get(
+    "/jobs/:job_id",
+    authenticateToken as express.RequestHandler,
+    requireMentorOrStudent as express.RequestHandler,
+    MentorJobController.getJobDetails as express.RequestHandler
+  )
+  .get(
+    "/m/jobs/active-contracts",
+    authenticateToken as express.RequestHandler,
+    requireMentorOrStudent as express.RequestHandler,
+    MentorJobController.getActiveContracts as express.RequestHandler
   );
 
 export default router;

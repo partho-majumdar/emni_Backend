@@ -18,6 +18,7 @@ import {
 import StudentBookSessionController from "../controllers/student/studentAllBookedSessions";
 import { ReviewController } from "../controllers/student/studentGiveReviews";
 import { AIChatController } from "../controllers/common/aiChatController";
+import { JobController } from "../controllers/student/studentJobController";
 
 const router = Router();
 
@@ -143,6 +144,89 @@ router
     authenticateToken as express.RequestHandler,
     requireStudent as express.RequestHandler,
     AIChatController.sendAIMessage as express.RequestHandler
+  );
+
+// Job posting routes
+router
+  .post(
+    "/jobs",
+    authenticateToken as express.RequestHandler,
+    requireStudent as express.RequestHandler,
+    JobController.createJobPost as express.RequestHandler
+  )
+  .put(
+    "/jobs/:job_id",
+    authenticateToken as express.RequestHandler,
+    requireStudent as express.RequestHandler,
+    JobController.updateJobPost as express.RequestHandler
+  )
+  .delete(
+    "/jobs/:job_id",
+    authenticateToken as express.RequestHandler,
+    requireStudent as express.RequestHandler,
+    JobController.deleteJobPost as express.RequestHandler
+  );
+
+// Job application routes
+router
+  .post(
+    "/jobs/:job_id/apply",
+    authenticateToken as express.RequestHandler,
+    requireStudent as express.RequestHandler,
+    JobController.applyForJob as express.RequestHandler
+  )
+  .get(
+    "/jobs/:job_id/applications",
+    authenticateToken as express.RequestHandler,
+    requireStudent as express.RequestHandler,
+    JobController.getJobApplications as express.RequestHandler
+  )
+  .put(
+    "/jobs/:job_id/applications/:application_id",
+    authenticateToken as express.RequestHandler,
+    requireStudent as express.RequestHandler,
+    JobController.updateApplicationStatus as express.RequestHandler
+  );
+
+// Job completion
+router.post(
+  "/jobs/:job_id/complete",
+  authenticateToken as express.RequestHandler,
+  requireStudent as express.RequestHandler,
+  JobController.completeJob as express.RequestHandler
+);
+
+// Job listing routes
+router
+  .get(
+    "/s/jobs",
+    authenticateToken as express.RequestHandler,
+    requireStudent as express.RequestHandler,
+    JobController.getAllJobs as express.RequestHandler
+  )
+  .get(
+    "/jobs/my-jobs",
+    authenticateToken as express.RequestHandler,
+    requireStudent as express.RequestHandler,
+    JobController.getMyPostedJobs as express.RequestHandler
+  )
+  .get(
+    "/jobs/my-applications",
+    authenticateToken as express.RequestHandler,
+    requireStudent as express.RequestHandler,
+    JobController.getMyJobApplications as express.RequestHandler
+  )
+  .get(
+    "/jobs/:job_id",
+    authenticateToken as express.RequestHandler,
+    requireStudent as express.RequestHandler,
+    JobController.getJobDetails as express.RequestHandler
+  )
+  .get(
+    "/s/jobs/active-contracts",
+    authenticateToken as express.RequestHandler,
+    requireStudent as express.RequestHandler,
+    JobController.getActiveContracts as express.RequestHandler
   );
 
 export default router;

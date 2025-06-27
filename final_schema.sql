@@ -381,3 +381,60 @@ CREATE TABLE AI_Chat_Messages (
     CONSTRAINT fk_ai_chat_messages_conversation FOREIGN KEY (conversation_id) REFERENCES AI_Conversations(conversation_id) ON DELETE CASCADE,
     CONSTRAINT fk_ai_chat_messages_user FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE,
 );
+
+CREATE TABLE Job_Posts (
+    job_id CHAR(36) DEFAULT (UUID()) NOT NULL,
+    user_id CHAR(36) NOT NULL,
+    job_type ENUM('Student', 'Mentor') NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    description TEXT NOT NULL,
+    start_date TIMESTAMP NOT NULL,
+    end_date TIMESTAMP NOT NULL,
+    application_deadline TIMESTAMP NOT NULL, 
+    ucoin_reward DECIMAL(15, 2) NOT NULL,
+    max_participants INT NOT NULL,
+    status ENUM('Open', 'Closed', 'Completed', 'Cancelled') DEFAULT 'Open' NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    CONSTRAINT pk_job_posts PRIMARY KEY (job_id),
+    CONSTRAINT fk_job_posts_user FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE,
+    CONSTRAINT chk_positive_ucoin CHECK (ucoin_reward > 0),
+    CONSTRAINT chk_positive_participants CHECK (max_participants > 0),
+    CONSTRAINT chk_date_validity CHECK (end_date > start_date)
+);
+
+CREATE TABLE Job_Applications (
+    application_id CHAR(36) DEFAULT (UUID()) NOT NULL,
+    job_id CHAR(36) NOT NULL,
+    applicant_id CHAR(36) NOT NULL,
+    description TEXT NOT NULL,
+    email VARCHAR(255) NOT NULL,
+    phone_number VARCHAR(20) NOT NULL,
+    status ENUM('Pending', 'Accepted', 'Rejected') DEFAULT 'Pending' NOT NULL,
+    applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    CONSTRAINT pk_job_applications PRIMARY KEY (application_id),
+    CONSTRAINT fk_job_applications_job FOREIGN KEY (job_id) REFERENCES Job_Posts(job_id) ON DELETE CASCADE,
+    CONSTRAINT fk_job_applications_applicant FOREIGN KEY (applicant_id) REFERENCES Users(user_id) ON DELETE CASCADE,
+    CONSTRAINT uq_job_applicant UNIQUE (job_id, applicant_id)
+);
+
+CREATE TABLE Job_Participants (
+    job_id CHAR(36) NOT NULL,
+    user_id CHAR(36) NOT NULL,
+    joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    CONSTRAINT pk_job_participants PRIMARY KEY (job_id, user_id),
+    CONSTRAINT fk_job_participants_job FOREIGN KEY (job_id) REFERENCES Job_Posts(job_id) ON DELETE CASCADE,
+    CONSTRAINT fk_job_participants_user FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE
+);
+
+CREATE TABLE Job_Transactions (
+    transaction_id CHAR(36) DEFAULT (UUID()) NOT NULL,
+    job_id CHAR(36) NOT NULL,
+    participant_id CHAR(36) NOT NULL,
+    ucoin_amount DECIMAL(15, 2) NOT NULL,
+    transaction_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    status ENUM('Pending', 'Completed', 'Failed') DEFAULT 'Pending' NOT NULL,
+    CONSTRAINT pk_job_transactions PRIMARY KEY (transaction_id),
+    CONSTRAINT fk_job_transactions_job FOREIGN KEY (job_id) REFERENCES Job_Posts(job_id) ON DELETE CASCADE,
+    CONSTRAINT fk_job_transactions_participant FOREIGN KEY (participant_id) REFERENCES Users(user_id) ON DELETE CASCADE,
+    CONSTRAINT chk_positive_transaction_amount CHECK (ucoin_amount > 0)
+);

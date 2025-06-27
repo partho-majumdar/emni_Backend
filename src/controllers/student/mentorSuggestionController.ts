@@ -285,17 +285,21 @@ export const getMentorDetails = async (
         GROUP_CONCAT(DISTINCT ms.platform) AS social_platforms,
         GROUP_CONCAT(DISTINCT ms.url) AS social_urls,
         (
-          SELECT COUNT(*) 
-          FROM One_On_One_Sessions o 
+          SELECT COUNT(DISTINCT o.student_id)
+          FROM One_On_One_Sessions o
           JOIN Mentor_Availability ma ON o.availability_id = ma.availability_id
-          WHERE ma.mentor_id = m.mentor_id 
+          WHERE ma.mentor_id = m.mentor_id
           AND ma.end_time < NOW()
         ) AS completed_one_on_one_sessions,
         (
           SELECT COUNT(*) 
+          FROM Sessions s
+          WHERE s.mentor_id = m.mentor_id
+        ) AS total_one_on_one_sessions,
+        (
+          SELECT COUNT(*) 
           FROM Group_Sessions gs
-          WHERE gs.mentor_id = m.mentor_id 
-          AND gs.session_date + INTERVAL gs.duration_mins MINUTE < NOW()
+          WHERE gs.mentor_id = m.mentor_id
         ) AS completed_group_sessions,
         (
           SELECT COUNT(DISTINCT gsp.student_id)
@@ -530,7 +534,7 @@ export const getMentorDetails = async (
     };
 
     const totalSessions =
-      (mentor.completed_one_on_one_sessions || 0) +
+      (mentor.total_one_on_one_sessions || 0) +
       (mentor.completed_group_sessions || 0);
     const avgRating = parseFloat(mentor.avg_rating) || 0;
 
